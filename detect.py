@@ -56,7 +56,7 @@ def detect(save_img=False):
     vid_path, vid_writer = None, None
     if camera:
         view_img = check_imshow()
-        # view_img = False
+        #view_img = False
         cudnn.benchmark = True  # set True to speed up constant image size inference
         dataset = LoadCamera(source, img_size=imgsz, stride=stride)
     elif webcam:
@@ -118,8 +118,9 @@ def detect(save_img=False):
             p = Path(p)  # to Path
             save_path = str(save_dir / p.name)  # img.jpg
             if camera:
-                clip_path = str(save_dir / 'clips' / 'test' / p.stem / f'{frame}')  # 0.jpg
-                keyframe_path = str(save_dir / 'keyframes' / 'test' / p.stem / f'{frame}') # 0.jpg
+                im0_origin = im0.copy()
+                clip_path = str(save_dir / 'clips' / 'test' / p.stem / f'{frame}') + '.jpg'  # 0.jpg
+                keyframe_path = str(save_dir / 'keyframes' / 'test' / p.stem / f'{frame}') + '.jpg'# 0.jpg
                 txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
             else:
                 txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # img.txt
@@ -173,8 +174,8 @@ def detect(save_img=False):
                         vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                     vid_writer.write(im0)
                     if camera: # save clip and keyframe frame to hit
-                        cv2.imwrite(clip_path, im0)
-                        cv2.imwrite(keyframe_path, im0)
+                        cv2.imwrite(clip_path, im0_origin)
+                        cv2.imwrite(keyframe_path, im0_origin)
 
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
