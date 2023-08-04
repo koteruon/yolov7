@@ -15,9 +15,9 @@ HEIGHT = 1080
 
 def main():
 
-    raw_root = r'/home/siplab/桌面/yoloNhit/HIT/data/table_tennis/videos/test/'
-    video_root = r'/home/siplab/桌面/yoloNhit/HIT/data/table_tennis/videos/yolov7_videos/'
-    result_root = r'/home/siplab/桌面/yoloNhit/HIT/data/table_tennis/videos/yolov7_kp_videos/'
+    raw_root = r'/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/videos/test/'
+    video_root = r'/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/videos/yolov7_videos/'
+    result_root = r'/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/videos/yolov7_kp_videos/'
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     weigths = torch.load('./weights/yolov7-w6-pose.pt', map_location=device)

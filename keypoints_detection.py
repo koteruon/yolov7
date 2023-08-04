@@ -14,11 +14,11 @@ from utils.plots import output_to_keypoint
 
 def main(is_train=False):
     if is_train:
-        root = r'/home/siplab/桌面/yoloNhit/HIT/data/table_tennis/keyframes/train/'
-        json_path = r'/home/siplab/桌面/yoloNhit/HIT/data/table_tennis/annotations/table_tennis_train_person_bbox_kpts.json'
+        root = r'/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/keyframes/train/'
+        json_path = r'/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_train_person_bbox_kpts.json'
     else:
-        root = r'/home/siplab/桌面/yoloNhit/HIT/data/table_tennis/keyframes/test/'
-        json_path = r'/home/siplab/桌面/yoloNhit/HIT/data/table_tennis/annotations/table_tennis_test_person_bbox_kpts.json'
+        root = r'/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/keyframes/test/'
+        json_path = r'/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_test_person_bbox_kpts.json'
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     weigths = torch.load('./weights/yolov7-w6-pose.pt', map_location=device)
