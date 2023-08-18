@@ -3,12 +3,11 @@ import json
 import os
 import time
 
+import cv2
 import numpy as np
 import torch
-from cv2 import cv2
 from torchvision import transforms
 from tqdm import tqdm
-
 from utils.datasets import letterbox
 from utils.general import non_max_suppression_kpt
 from utils.plots import output_to_keypoint
@@ -29,11 +28,11 @@ class KeyPointDetection:
 
         # 輸出檔案位置
         if is_train:
-            self.root = r"/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/keyframes/train/"
-            self.json_path = r"/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_train_person_bbox_kpts.json"
+            self.root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/keyframes/train/"
+            self.json_path = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_train_person_bbox_kpts.json"
         else:
-            self.root = r"/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/keyframes/test/"
-            self.json_path_pattern = r"/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_test_person_bbox_kpts_{}.json"
+            self.root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/keyframes/test/"
+            self.json_path_pattern = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_test_person_bbox_kpts_{}.json"
             self.json_path = self.json_path_pattern.format("")
 
     def set_key_frame_path(self, timestamp):
@@ -116,7 +115,6 @@ if __name__ == "__main__":
 
     t1 = time.time()
     key_points_detector = KeyPointDetection(is_train=args.train)
-    key_points_detector.load_model()
     key_points_detector.detect()
     key_points_detector.dump()
     t2 = time.time()

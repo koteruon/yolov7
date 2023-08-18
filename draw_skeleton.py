@@ -1,11 +1,11 @@
-import torch
-import cv2
-from torchvision import transforms
-import numpy as np
 import os
-from tqdm import tqdm
 import time
 
+import cv2
+import numpy as np
+import torch
+from torchvision import transforms
+from tqdm import tqdm
 from utils.datasets import letterbox
 from utils.general import non_max_suppression_kpt
 from utils.plots import output_to_keypoint, plot_skeleton_kpts
@@ -15,9 +15,9 @@ HEIGHT = 1080
 
 def main():
 
-    raw_root = r'/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/videos/test/'
-    video_root = r'/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/videos/yolov7_videos/'
-    result_root = r'/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/videos/yolov7_kp_videos/'
+    raw_root = r'/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/videos/test/'
+    video_root = r'/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/videos/yolov7_videos/'
+    result_root = r'/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/videos/yolov7_kp_videos/'
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     weigths = torch.load('./weights/yolov7-w6-pose.pt', map_location=device)

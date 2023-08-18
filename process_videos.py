@@ -5,15 +5,15 @@ import subprocess
 import time
 from multiprocessing import Pool
 
+import cv2
 import pandas as pd
 import tqdm
-from cv2 import cv2
 
 
 class ProcessVideos:
     def __init__(self) -> None:
-        self.clip_root = r"/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/clips/test/"
-        self.midframe_root = r"/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/keyframes/test/"
+        self.clip_root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/clips/test/"
+        self.midframe_root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/keyframes/test/"
 
     def max_width_n_max_height(self, width, height, targ_size=360):
         if min(width, height) <= targ_size:

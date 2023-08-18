@@ -1,15 +1,16 @@
-import os
-from glob import glob
-import shutil
 import argparse
+import os
+import shutil
 import time
+from glob import glob
+
 
 def main(is_train=False):
 
     results_root = r'./runs/detect/'
     results_list = list(glob(os.path.join(results_root, 'hit*')))
 
-    target_root = r'/home/siplab/桌面/yoloNhit_calvin/HIT/data/table_tennis/'
+    target_root = r'/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/'
     video_dir = os.path.join(target_root, 'videos/test/')
     if is_train:
         lbl_dir = os.path.join(target_root, 'train/')
