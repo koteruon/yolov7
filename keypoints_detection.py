@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import sys
 import time
 
 import cv2
@@ -11,16 +12,17 @@ from tqdm import tqdm
 from utils.datasets import letterbox
 from utils.general import non_max_suppression_kpt
 from utils.plots import output_to_keypoint
+from yolov7.process_videos import ProcessVideos
 
 
 class KeyPointDetection:
     def __init__(self, is_train=False):
         # 輸出的結果
-        self.all_outputs = []
+        self.all_outputs = {}
 
         # load model
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        weigths = torch.load("./weights/yolov7-w6-pose.pt", map_location=self.device)
+        weigths = torch.load("weights/yolov7-w6-pose.pt", map_location=self.device)
         self.model = weigths["model"]
         _ = self.model.float().eval()
         if torch.cuda.is_available():
@@ -32,13 +34,13 @@ class KeyPointDetection:
             self.json_path = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_train_person_bbox_kpts.json"
         else:
             self.root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/keyframes/test/"
-            self.json_path_pattern = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_test_person_bbox_kpts_{}.json"
-            self.json_path = self.json_path_pattern.format("")
+            self.json_path_pattern = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_test_person_bbox_kpts.json"
 
-    def set_key_frame_path(self, timestamp):
-        self.json_path = self.json_path_pattern.format(timestamp)
+        self.frame_span = 30
+        self.process_videos = ProcessVideos()
 
-    def detect_one(self, im_file_name, im, root_idx=0):
+    def detect_one(self, timestamp, root_idx=0, root_dir="M-4"):
+        im = cv2.imread(os.path.join(self.root, root_dir, "{}.jpg".format(timestamp)))
         origin_height = im.shape[0]
         origin_width = im.shape[1]
 
@@ -75,27 +77,42 @@ class KeyPointDetection:
             keypoints[0::3] = keypoints[0::3] * w_ratio
             keypoints[1::3] = keypoints[1::3] * h_ratio
 
-            self.all_outputs.append(
-                {
-                    "image_id": int("{}".format(im_file_name.split(".")[0])) + (100000 * root_idx),
-                    "category_id": 1 if category_id == 0 else category_id,
-                    "bbox": bbox.tolist(),
-                    "keypoints": keypoints.reshape(-1, 3).tolist(),
-                    "score": float(output[i][6]),
-                }
-            )
+            image_id = int("{}".format(timestamp)) + (100000 * root_idx)
+            coco_output = {
+                "image_id": image_id,
+                "category_id": 1 if category_id == 0 else category_id,
+                "bbox": bbox.tolist(),
+                "keypoints": keypoints.reshape(-1, 3).tolist(),
+                "score": float(output[i][6]),
+            }
+            if image_id in self.all_outputs:
+                self.all_outputs[image_id].append(coco_output)
+            else:
+                self.all_outputs[image_id] = [coco_output]
 
-    def detect(self):
+    def detect(self, timestamp=None):
+        detect_outputs = {}
         root_path = sorted(os.listdir(self.root), key=lambda x: int(x.split("-")[1]))
         with torch.no_grad():
             for root_idx, root_dir in enumerate(root_path):
-                path = os.path.join(self.root, root_dir)
-                # if root_dir not in ["f-3","M-4"] :
-                #     continue
-                list_of_images = os.listdir(path)
-                for image in tqdm(list_of_images):
-                    im = cv2.imread(os.path.join(path, image))
-                    self.detect_one(image, im, root_idx)
+                if timestamp is not None:
+                    # camera streaming
+                    right_span = self.frame_span // 2
+                    left_span = self.frame_span - right_span
+                    for x in range(int(timestamp) - left_span, int(timestamp) + right_span):
+                        if self.process_videos.is_keyframe(x):
+                            if os.path.exists(os.path.join(self.root, root_dir, "{}.jpg".format(x))):
+                                if x not in self.all_outputs:
+                                    self.detect_one(x, root_idx, root_dir)
+                                detect_outputs[x] = self.all_outputs[x]
+                else:
+                    path = os.path.join(self.root, root_dir)
+                    list_of_images = os.listdir(path)
+                    for image in tqdm(list_of_images):
+                        self.detect_one(image.split(".")[0], root_idx, root_dir)
+
+        self.all_outputs = detect_outputs
+        return [item for row in detect_outputs.values() for item in row]
 
     def dump(self):
         with open(self.json_path, "w") as fp:

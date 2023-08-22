@@ -6,10 +6,9 @@ from pathlib import Path
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
-from numpy import random
-
 from keypoints_detection import KeyPointDetection
 from models.experimental import attempt_load
+from numpy import random
 from process_videos import ProcessVideos
 from utils.datasets import LoadCamera, LoadImages, LoadStreams
 from utils.general import (
@@ -95,7 +94,6 @@ class YoloV7:
             cudnn.benchmark = True  # set True to speed up constant image size inference
             dataset = LoadCamera(source, img_size=imgsz, stride=stride)
             process_video = ProcessVideos()
-            key_point_detection = KeyPointDetection()
         elif webcam:
             view_img = check_imshow()
             cudnn.benchmark = True  # set True to speed up constant image size inference
@@ -217,10 +215,6 @@ class YoloV7:
                         vid_writer.write(im0)
                         if camera:  # save clip and keyframe frame to hit
                             frame = process_video.resize_image(im0, frame)
-                            if process_video.is_keyframe(frame):
-                                key_point_detection.set_key_frame_path(frame)
-                                key_point_detection.detect_one(f"{frame}" + ".jpg", im0_origin)
-                                key_point_detection.dump()
 
         if save_txt or save_img:
             s = (
