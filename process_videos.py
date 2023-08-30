@@ -43,10 +43,10 @@ class ProcessVideos:
 
         clip_filename = f'{os.path.join(targ_dir, str(timestamp)+".jpg")}'
         cv2.imwrite(clip_filename, frame)
-        # if self.is_keyframe(timestamp):
-        keyframe_filename = f'{os.path.join(frame_targ_dir, str(timestamp)+".jpg")}'
-        cv2.imwrite(keyframe_filename, frame)
+        if self.is_keyframe(timestamp):
+            keyframe_filename = f'{os.path.join(frame_targ_dir, str(timestamp)+".jpg")}'
+            cv2.imwrite(keyframe_filename, frame)
         return frame
 
-    def is_keyframe(self, timestamp, targ_fps=5):
+    def is_keyframe(self, timestamp, targ_fps=1):
         return (timestamp + 1 + targ_fps // 2) % targ_fps == 0
