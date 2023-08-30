@@ -12,11 +12,10 @@ from tqdm import tqdm
 from utils.datasets import letterbox
 from utils.general import non_max_suppression_kpt
 from utils.plots import output_to_keypoint
-from yolov7.process_videos import ProcessVideos
 
 
 class KeyPointDetection:
-    def __init__(self, is_train=False):
+    def __init__(self, is_train=False, process_videos=None):
         # 輸出的結果
         self.all_outputs = {}
 
@@ -37,7 +36,7 @@ class KeyPointDetection:
             self.json_path_pattern = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_test_person_bbox_kpts.json"
 
         self.frame_span = 30
-        self.process_videos = ProcessVideos()
+        self.process_videos = process_videos
 
     def detect_one(self, timestamp, root_idx=0, root_dir="M-4"):
         im = cv2.imread(os.path.join(self.root, root_dir, "{}.jpg".format(timestamp)))
