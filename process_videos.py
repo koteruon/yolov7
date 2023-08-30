@@ -12,6 +12,7 @@ import tqdm
 
 class ProcessVideos:
     def __init__(self) -> None:
+        self.clip_root_origin = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/clips_ori/test/"
         self.clip_root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/clips/test/"
         self.midframe_root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/keyframes/test/"
 
@@ -34,14 +35,20 @@ class ProcessVideos:
         targ_fps=30,
         targ_size=360,
     ):
+        ori_dir = os.path.join(self.clip_root_origin, "M-4")
         targ_dir = os.path.join(self.clip_root, "M-4")
         frame_targ_dir = os.path.join(self.midframe_root, "M-4")
 
         width, height, channels = frame.shape
         new_width, new_height = self.max_width_n_max_height(width, height, targ_size)
-        frame = cv2.resize(frame, (new_width, new_height))
 
+        # save origin image
+        clip_origin_filename = f'{os.path.join(targ_dir, str(timestamp)+".jpg")}'
+        cv2.imwrite(clip_origin_filename, frame)
+
+        # resize image
         clip_filename = f'{os.path.join(targ_dir, str(timestamp)+".jpg")}'
+        frame = cv2.resize(frame, (new_width, new_height))
         cv2.imwrite(clip_filename, frame)
         if self.is_keyframe(timestamp):
             keyframe_filename = f'{os.path.join(frame_targ_dir, str(timestamp)+".jpg")}'
