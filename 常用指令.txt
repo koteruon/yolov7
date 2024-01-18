@@ -1,0 +1,11 @@
+常用指令
+
+# create video0
+sudo modprobe v4l2loopback video_nr=0
+
+# 將檔案慢速成30FPS
+ffmpeg -i input.mp4 -vf setpts=4*PTS -r 30 output.mp4
+
+# yolo 訓練
+## 記得更改data/coco.yaml
+python train.py --workers 8 --batch-size 8 --data data/coco.yaml --img 960 960 --cfg cfg/training/yolov7-e6e.yaml --weights weights/yolov7x_3classes.pt --name yolov7-e6e_202310202 --hyp data/hyp.scratch.custom.yaml  --exist-ok

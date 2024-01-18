@@ -6,9 +6,10 @@ from pathlib import Path
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
+from numpy import random
+
 from keypoints_detection import KeyPointDetection
 from models.experimental import attempt_load
-from numpy import random
 from process_videos import ProcessVideos
 from utils.datasets import LoadCamera, LoadImages, LoadStreams
 from utils.general import (
@@ -40,7 +41,7 @@ class YoloV7:
                 new_width = int(round(new_height * width / height / 2) * 2)
         return new_width, new_height
 
-    def detect(self, save_img=False):
+    def detect(self, save_img=False, only_ball=False):
         source, weights, view_img, save_txt, imgsz, trace = (
             opt.source,
             opt.weights,
@@ -176,6 +177,9 @@ class YoloV7:
 
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
+                        if only_ball:
+                            if int(cls) != 0:
+                                continue
                         if save_txt:  # Write to file
                             xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                             line = (cls, *xywh, conf) if opt.save_conf else (cls, *xywh)  # label format
@@ -250,6 +254,7 @@ if __name__ == "__main__":
     parser.add_argument("--name", default="exp", help="save results to project/name")
     parser.add_argument("--exist-ok", action="store_true", help="existing project/name ok, do not increment")
     parser.add_argument("--no-trace", action="store_true", help="don`t trace model")
+    parser.add_argument("--onlyball", action="store_true", help="plot only ball")
     opt = parser.parse_args()
     print(opt)
     # check_requirements(exclude=('pycocotools', 'thop'))
@@ -258,7 +263,7 @@ if __name__ == "__main__":
         yoloV7 = YoloV7()
         if opt.update:  # update all models (to fix SourceChangeWarning)
             for opt.weights in ["yolov7.pt"]:
-                yoloV7.detect()
+                yoloV7.detect(only_ball=opt.onlyball)
                 strip_optimizer(opt.weights)
         else:
-            yoloV7.detect()
+            yoloV7.detect(only_ball=opt.onlyball)

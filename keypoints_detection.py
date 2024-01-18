@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from torchvision import transforms
 from tqdm import tqdm
+
 from utils.datasets import letterbox
 from utils.general import non_max_suppression_kpt
 from utils.plots import output_to_keypoint
@@ -44,7 +45,6 @@ class KeyPointDetection:
         origin_width = im.shape[1]
 
         im = letterbox(im, 960, stride=64, auto=True)[0]
-        # im_ = im.copy()
         im = transforms.ToTensor()(im)
         im = torch.tensor(np.array([im.numpy()]))
 
