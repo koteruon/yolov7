@@ -738,7 +738,7 @@ def main():
     WIDTH = 512
 
     # 影片跟目錄
-    root_path = f"./runs/detect/yolov7_202311222"
+    root_path = f"./runs/detect/yolov7"
     input_path = os.path.join(root_path, "010_Hexagonal_Backhand_Pull_Red.MP4")
 
     # 發球(A是左邊，B是右邊)
@@ -883,62 +883,8 @@ def main():
     while success:
         prev_time = time.time()
 
-        """ TODO: 不需要判斷發球
-        if count >= k:
-            cnt = count - k
-
-            if ans_df.loc[cnt, "class_1"] in [1, 2]:
-                is_A_serve = True
-                print(f"<-------Frame : {count} A serve!!------->")
-            elif ans_df.loc[cnt, "class_2"] in [1, 2]:
-                is_B_serve = True
-                print(f"<-------Frame : {count} B serve!!------->")
-
-
-            ## 偷吃步 過濾一些非發球
-            point_x = (upper_right[0] + upper_left[0]) / 2
-            range_x = (upper_right[0] - upper_left[0]) / 3
-            point_y = max(lower_right[1], lower_left[1])
-            range_y = 75
-            point_lbd = (1 * lower_left[0]) / 10
-            point_rbd = (9 * 1920 - lower_right[0]) / 10
-
-            temp_ball = record_ball_df.loc[cnt : cnt + batch - 1, "Visibility"].values
-            if np.count_nonzero(temp_ball) > k / 2:
-                temp_ball_x = record_ball_df[record_ball_df["Visibility"] != 0].loc[cnt : cnt + batch - 1, "X"].values
-                temp_ball_y = record_ball_df[record_ball_df["Visibility"] != 0].loc[cnt : cnt + batch - 1, "Y"].values
-
-                thresh_ball_x = np.mean(temp_ball_x)
-                thresh_ball_y = np.mean(temp_ball_y)
-
-                if (is_A_serve or is_B_serve) and (
-                    (point_x - range_x <= thresh_ball_x <= point_x + range_x)
-                    or (thresh_ball_y >= point_y + range_y)
-                    or not (point_lbd <= thresh_ball_x <= point_rbd)
-                ):
-                    miss_detection_count += 1
-                    is_A_serve = False
-                    is_B_serve = False
-        """
-        if is_A_serve or is_B_serve:
-            is_serve_wait = False
-            serve_signal_count = count
-            hit_count = 0
-            bounce_frame_A, bounce_frame_B = -1, -1
-            img_opt = Draw_MiniBoard(miniboard_height, miniboard_width, miniboard_edge)
-            print(f"<---Serve detected by OpenPose with ball trajectory--->")
-            serve_detection_count += 1
-            if ((count / 59) % 60) > 0:
-                print(f"Frame : {count}, serve ball at {int((count/59)/60)} m {int(count/59) % (60)} s")
-            else:
-                print(f"Frame : {count}, serve ball at {int(count/59)} s")
-            # 初始化參數後取消
-            is_A_serve, is_B_serve = False, False
-            print(f"<----------------------------------------------------->")
-        ######################################################
         isball = []
         image_CV = image.copy()
-
         label_file = os.path.join(label_path, f"{video_name}_{count}.txt")
         ## 檔案存在
         if os.path.exists(label_file):
@@ -978,7 +924,7 @@ def main():
                             a, b, c = parabola[0]
                             fit = a * x_c_pred**2 + b * x_c_pred + c
                             # cv2.circle(image_CV, (x_c_pred, int(fit)), 5, (255, 0, 0), 4)
-                            # 差距 5 個 pixel 以上視為脫離預測的拋物線
+                            # 差距 10 個 pixel 以上視為脫離預測的拋物線
                             if abs(y_c_pred - fit) >= 10:
                                 x_last = x_tmp[0]
                                 # 預測球在球桌上的落點, x_drop : 本次與前次的中點, y_drop : x_drop 於拋物線上的位置

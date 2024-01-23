@@ -34,9 +34,9 @@ class KeyPointDetection:
             self.json_path = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_train_person_bbox_kpts.json"
         else:
             self.root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/keyframes/test/"
-            self.json_path_pattern = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_test_person_bbox_kpts.json"
+            self.json_path = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_test_person_bbox_kpts.json"
 
-        self.frame_span = 30
+        self.frame_span = 60
         self.process_videos = process_videos
 
     def detect_one(self, timestamp, root_idx=0, root_dir="M-4"):
@@ -91,7 +91,7 @@ class KeyPointDetection:
 
     def detect(self, timestamp=None):
         detect_outputs = {}
-        root_path = sorted(os.listdir(self.root), key=lambda x: int(x.split("-")[1]))
+        root_path = sorted(os.listdir(self.root))
         with torch.no_grad():
             for root_idx, root_dir in enumerate(root_path):
                 if timestamp is not None:
@@ -110,12 +110,13 @@ class KeyPointDetection:
                     for image in tqdm(list_of_images):
                         self.detect_one(image.split(".")[0], root_idx, root_dir)
 
-        self.all_outputs = detect_outputs
-        return [item for row in detect_outputs.values() for item in row]
-
     def dump(self):
         with open(self.json_path, "w") as fp:
-            json.dump(self.all_outputs, fp)
+            output = []
+            for op in self.all_outputs.values():
+                for line in op:
+                    output.append(line)
+            json.dump(output, fp)
         print(f"Write keypoints into json file {self.json_path} successfully.")
 
 

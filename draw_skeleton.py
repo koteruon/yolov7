@@ -111,7 +111,8 @@ class DrawSkeleton:
         nimg = cv2.cvtColor(nimg, cv2.COLOR_RGB2BGR)
 
         for idx in range(output.shape[0]):
-            if 0 <= output[idx, 2] <= 960 * 5 / 9 and 0 <= output[idx, 3] <= 960 * 0.25:
+            # 去除x軸在中間的裁判，還有y軸上半部場外的人
+            if (output[idx, 2] >= 960 * 13 / 34 and output[idx, 2] <= 960 * 20 / 34) or 0 <= output[idx, 3] <= 576 * 1 / 4:
                 continue
             plot_skeleton_kpts(nimg, output[idx, 7:].T, 3)
 
