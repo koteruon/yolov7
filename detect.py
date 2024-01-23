@@ -12,20 +12,13 @@ from keypoints_detection import KeyPointDetection
 from models.experimental import attempt_load
 from process_videos import ProcessVideos
 from utils.datasets import LoadCamera, LoadImages, LoadStreams
-from utils.general import (
-    apply_classifier,
-    check_img_size,
-    check_imshow,
-    check_requirements,
-    increment_path,
-    non_max_suppression,
-    scale_coords,
-    set_logging,
-    strip_optimizer,
-    xyxy2xywh,
-)
+from utils.general import (apply_classifier, check_img_size, check_imshow,
+                           check_requirements, increment_path,
+                           non_max_suppression, scale_coords, set_logging,
+                           strip_optimizer, xyxy2xywh)
 from utils.plots import plot_one_box
-from utils.torch_utils import TracedModel, load_classifier, select_device, time_synchronized
+from utils.torch_utils import (TracedModel, load_classifier, select_device,
+                               time_synchronized)
 
 
 class YoloV7:
@@ -213,7 +206,7 @@ class YoloV7:
                                 w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                                 h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                             else:  # stream
-                                fps, w, h = 30, im0.shape[1], im0.shape[0]
+                                fps, w, h = 60, im0.shape[1], im0.shape[0]
                                 save_path += ".mp4"
                             vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
                         vid_writer.write(im0)

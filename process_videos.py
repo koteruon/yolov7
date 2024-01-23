@@ -32,7 +32,7 @@ class ProcessVideos:
         self,
         frame,
         timestamp: int,
-        targ_fps=30,
+        targ_fps=60,
         targ_size=360,
     ):
         ori_dir = os.path.join(self.clip_root_origin, "M-4")
