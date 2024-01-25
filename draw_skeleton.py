@@ -1,3 +1,4 @@
+import argparse
 import os
 import time
 
@@ -6,14 +7,13 @@ import numpy as np
 import torch
 from torchvision import transforms
 from tqdm import tqdm
-
 from utils.datasets import letterbox
 from utils.general import non_max_suppression_kpt
 from utils.plots import output_to_keypoint, plot_skeleton_kpts
 
 
 class DrawSkeleton:
-    def __init__(self):
+    def __init__(self, args=None):
         self.WIDTH = 1920
         self.HEIGHT = 1080
         self.raw_root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/videos/test/"
@@ -22,6 +22,7 @@ class DrawSkeleton:
         self.video_names = os.listdir(self.video_root)
         self.video_list = [os.path.join(self.video_root, v) for v in self.video_names]
         self.raw_list = [os.path.join(self.raw_root, v) for v in self.video_names]
+        self.args = args
 
     def load_model(self):
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -111,9 +112,21 @@ class DrawSkeleton:
         nimg = cv2.cvtColor(nimg, cv2.COLOR_RGB2BGR)
 
         for idx in range(output.shape[0]):
-            # 去除x軸在中間的裁判，還有y軸上半部場外的人
-            if (output[idx, 2] >= 960 * 13 / 34 and output[idx, 2] <= 960 * 20 / 34) or 0 <= output[idx, 3] <= 576 * 1 / 4:
-                continue
+            # 去除x軸在中間的裁判
+            if self.args.person_left_boundary != "" and self.args.person_left_boundary != "":
+                left_numerator, left_denominator = map(int, self.args.person_left_boundary.split('/'))
+                right_numerator, right_denominator = map(int, self.args.person_right_boundary.split('/'))
+                if output[idx, 2] >= 960 * (left_numerator / left_denominator) and output[idx, 2] <= 960 * (right_numerator / right_denominator):
+                    continue
+            if self.args.person_top_boundary != "":
+                numerator, denominator = map(int, self.args.person_top_boundary.split('/'))
+                if output[idx, 3] < 576 * (numerator / denominator): # y軸在界線之上
+                    continue
+            if self.args.person_botton_boundary != "":
+                numerator, denominator = map(int, self.args.person_botton_boundary.split('/'))
+                if output[idx, 3] > 576 * (numerator / denominator): # y軸在界線之下
+                    continue
+
             plot_skeleton_kpts(nimg, output[idx, 7:].T, 3)
 
         nimg = cv2.cvtColor(nimg, cv2.COLOR_RGB2BGR)
@@ -130,8 +143,15 @@ class DrawSkeleton:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="draw skeleton")
+    parser.add_argument("--person-left-boundary", default="", help="person boundary")
+    parser.add_argument("--person-right-boundary", default="", help="person boundary")
+    parser.add_argument("--person-top-boundary", default="", help="person boundary")
+    parser.add_argument("--person-botton-boundary", default="", help="person boundary")
+    args = parser.parse_args()
+
     t1 = time.time()
-    draw_skeleton = DrawSkeleton()
+    draw_skeleton = DrawSkeleton(args = args)
     draw_skeleton.load_model()
     draw_skeleton.draw_skeletons()
     t2 = time.time()

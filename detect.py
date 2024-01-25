@@ -173,6 +173,42 @@ class YoloV7:
                         if only_ball:
                             if int(cls) != 0:
                                 continue
+
+                        # 判斷boundaries
+                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                        if cls == 0: # ball boundaries
+                            if opt.ball_top_boundary != "":
+                                numerator, denominator = map(int, opt.ball_top_boundary.split('/'))
+                                if xywh[1] < (numerator / denominator): # y軸在界線之上
+                                    continue
+                            if opt.ball_botton_boundary != "":
+                                numerator, denominator = map(int, opt.ball_botton_boundary.split('/'))
+                                if xywh[1] > (numerator / denominator): # y軸在界線之下
+                                    continue
+                        if cls  == 1: # person boundaries
+                            if opt.person_left_boundary  != "" and opt.person_right_boundary != "":
+                                left_numerator, left_denominator = map(int, opt.person_left_boundary.split('/'))
+                                right_numerator, right_denominator = map(int, opt.person_right_boundary.split('/'))
+                                if xywh[0] > (left_numerator / left_denominator) and xywh[0] < (right_numerator / right_denominator): # x軸在正中間的
+                                    continue
+                            if opt.person_top_boundary != "":
+                                numerator, denominator = map(int, opt.person_top_boundary.split('/'))
+                                if xywh[1] < (numerator / denominator): # y軸在界線之上
+                                    continue
+                            if opt.person_botton_boundary != "":
+                                numerator, denominator = map(int, opt.person_botton_boundary.split('/'))
+                                if xywh[1] > (numerator / denominator): # y軸在界線之下
+                                    continue
+                        if cls == 2: # table boundaries
+                            if opt.table_top_boundary != "":
+                                numerator, denominator = map(int, opt.table_top_boundary.split('/'))
+                                if xywh[1] < (numerator / denominator): # y軸在界線之上
+                                    continue
+                            if opt.table_botton_boundary != "":
+                                numerator, denominator = map(int, opt.table_botton_boundary.split('/'))
+                                if xywh[1] > (numerator / denominator): # y軸在界線之下
+                                    continue
+
                         if save_txt:  # Write to file
                             xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                             line = (cls, *xywh, conf) if opt.save_conf else (cls, *xywh)  # label format
@@ -248,6 +284,14 @@ if __name__ == "__main__":
     parser.add_argument("--exist-ok", action="store_true", help="existing project/name ok, do not increment")
     parser.add_argument("--no-trace", action="store_true", help="don`t trace model")
     parser.add_argument("--onlyball", action="store_true", help="plot only ball")
+    parser.add_argument("--ball-top-boundary", default="", help="ball boundary")
+    parser.add_argument("--ball-botton-boundary", default="", help="ball boundary")
+    parser.add_argument("--person-left-boundary", default="", help="person boundary")
+    parser.add_argument("--person-right-boundary", default="", help="person boundary")
+    parser.add_argument("--person-top-boundary", default="", help="person boundary")
+    parser.add_argument("--person-botton-boundary", default="", help="person boundary")
+    parser.add_argument("--table-top-boundary", default="", help="table boundary")
+    parser.add_argument("--table-botton-boundary", default="", help="table boundary")
     opt = parser.parse_args()
     print(opt)
     # check_requirements(exclude=('pycocotools', 'thop'))

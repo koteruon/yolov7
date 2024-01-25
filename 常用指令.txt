@@ -3,6 +3,9 @@
 # create video0
 sudo modprobe v4l2loopback video_nr=0
 
+# 修改成照恩的目錄
+sudo chown chaoen:chaoen /dev/video0
+
 # 從擷取卡取得影像轉到 /dev/video0
 ffmpeg -y -f decklink -i 'DeckLink Quad HDMI Recorder (3)' -pix_fmt bgr24 -timestamps abs -f v4l2 /dev/video0
 

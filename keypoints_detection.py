@@ -16,7 +16,9 @@ from utils.plots import output_to_keypoint
 
 
 class KeyPointDetection:
-    def __init__(self, is_train=False, process_videos=None):
+    def __init__(self, is_train=False, process_videos=None, args = None):
+        self.args = args
+
         # 輸出的結果
         self.all_outputs = {}
 
@@ -65,14 +67,29 @@ class KeyPointDetection:
         h_ratio = origin_height / yolo_height
         w_ratio = origin_width / yolo_width
 
-        for i in range(output.shape[0]):
-            category_id = int(output[i][1])  ## cls
+        for idx in range(output.shape[0]):
+            # 去除x軸在中間的裁判
+            if self.args.person_left_boundary != "" and self.args.person_right_boundary != "":
+                left_numerator, left_denominator = map(int, self.args.person_left_boundary.split('/'))
+                right_numerator, right_denominator = map(int, self.args.person_right_boundary.split('/'))
+                if output[idx, 2] >= 960 * (left_numerator / left_denominator) and output[idx, 2] <= 960 * (right_numerator / right_denominator):
+                    continue
+            if self.args.person_top_boundary != "":
+                numerator, denominator = map(int, self.args.person_top_boundary.split('/'))
+                if output[idx, 3] < 576 * (numerator / denominator): # y軸在界線之上
+                    continue
+            if self.args.person_botton_boundary != "":
+                numerator, denominator = map(int, self.args.person_botton_boundary.split('/'))
+                if output[idx, 3] > 576 * (numerator / denominator): # y軸在界線之下
+                    continue
 
-            bbox = output[i][2:6]
+            category_id = int(output[idx][1])  ## cls
+
+            bbox = output[idx][2:6]
             bbox[0::2] = bbox[0::2] * w_ratio
             bbox[1::2] = bbox[1::2] * h_ratio
 
-            keypoints = output[i][7:]
+            keypoints = output[idx][7:]
             keypoints[0::3] = keypoints[0::3] * w_ratio
             keypoints[1::3] = keypoints[1::3] * h_ratio
 
@@ -82,7 +99,7 @@ class KeyPointDetection:
                 "category_id": 1 if category_id == 0 else category_id,
                 "bbox": bbox.tolist(),
                 "keypoints": keypoints.reshape(-1, 3).tolist(),
-                "score": float(output[i][6]),
+                "score": float(output[idx][6]),
             }
             if image_id in self.all_outputs:
                 self.all_outputs[image_id].append(coco_output)
@@ -127,11 +144,15 @@ if __name__ == "__main__":
         help="Build training dataset",
         action="store_true",
     )
+    parser.add_argument("--person-left-boundary", default="", help="person boundary")
+    parser.add_argument("--person-right-boundary", default="", help="person boundary")
+    parser.add_argument("--person-top-boundary", default="", help="person boundary")
+    parser.add_argument("--person-botton-boundary", default="", help="person boundary")
 
     args = parser.parse_args()
 
     t1 = time.time()
-    key_points_detector = KeyPointDetection(is_train=args.train)
+    key_points_detector = KeyPointDetection(is_train=args.train, args=args)
     key_points_detector.detect()
     key_points_detector.dump()
     t2 = time.time()
