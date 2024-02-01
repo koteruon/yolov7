@@ -32,11 +32,11 @@ class KeyPointDetection:
 
         # 輸出檔案位置
         if is_train:
-            self.root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/keyframes/train/"
-            self.json_path = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_train_person_bbox_kpts.json"
+            self.root = r"/home/siplab4/chaoen/yoloNhit_calvin/HIT/data/table_tennis/keyframes/train/"
+            self.json_path = r"/home/siplab4/chaoen/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_train_person_bbox_kpts.json"
         else:
-            self.root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/keyframes/test/"
-            self.json_path = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_test_person_bbox_kpts.json"
+            self.root = r"/home/siplab4/chaoen/yoloNhit_calvin/HIT/data/table_tennis/keyframes/test/"
+            self.json_path = r"/home/siplab4/chaoen/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_test_person_bbox_kpts.json"
 
         self.frame_span = 60
         self.process_videos = process_videos

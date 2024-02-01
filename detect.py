@@ -6,10 +6,9 @@ from pathlib import Path
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
-from numpy import random
-
 from keypoints_detection import KeyPointDetection
 from models.experimental import attempt_load
+from numpy import random
 from process_videos import ProcessVideos
 from utils.datasets import LoadCamera, LoadImages, LoadStreams
 from utils.general import (apply_classifier, check_img_size, check_imshow,
@@ -97,7 +96,9 @@ class YoloV7:
 
         # Get names and colors
         names = model.module.names if hasattr(model, "module") else model.names
-        colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
+        # colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
+        # colors = [[239,107,39],[125,209,71],[73,188,215]]
+        colors = [[158,66,3],[221,47,113],[86,104,193]] # 新聞記者的顏色
 
         # Run inference
         if device.type != "cpu":
@@ -270,7 +271,7 @@ if __name__ == "__main__":
     parser.add_argument("--device", default="", help="cuda device, i.e. 0 or 0,1,2,3 or cpu")
     parser.add_argument("--view-img", action="store_true", help="display results")
     parser.add_argument(
-        "--save-dir", default="/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis", help="save results directory"
+        "--save-dir", default="/home/siplab4/chaoen/yoloNhit_calvin/HIT/data/table_tennis", help="save results directory"
     )
     parser.add_argument("--save-txt", action="store_true", help="save results to *.txt")
     parser.add_argument("--save-conf", action="store_true", help="save confidences in --save-txt labels")

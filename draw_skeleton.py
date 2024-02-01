@@ -16,9 +16,9 @@ class DrawSkeleton:
     def __init__(self, args=None):
         self.WIDTH = 1920
         self.HEIGHT = 1080
-        self.raw_root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/videos/test/"
-        self.video_root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/videos/yolov7_videos/"
-        self.result_root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/videos/yolov7_kp_videos/"
+        self.raw_root = r"/home/siplab4/chaoen/yoloNhit_calvin/HIT/data/table_tennis/videos/test/"
+        self.video_root = r"/home/siplab4/chaoen/yoloNhit_calvin/HIT/data/table_tennis/videos/yolov7_videos/"
+        self.result_root = r"/home/siplab4/chaoen/yoloNhit_calvin/HIT/data/table_tennis/videos/yolov7_kp_videos/"
         self.video_names = os.listdir(self.video_root)
         self.video_list = [os.path.join(self.video_root, v) for v in self.video_names]
         self.raw_list = [os.path.join(self.raw_root, v) for v in self.video_names]

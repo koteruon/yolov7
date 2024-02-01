@@ -12,9 +12,9 @@ import tqdm
 
 class ProcessVideos:
     def __init__(self) -> None:
-        self.clip_root_origin = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/clips_ori/test/"
-        self.clip_root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/clips/test/"
-        self.midframe_root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/keyframes/test/"
+        self.clip_root_origin = r"/home/siplab4/chaoen/yoloNhit_calvin/HIT/data/table_tennis/clips_ori/test/"
+        self.clip_root = r"/home/siplab4/chaoen/yoloNhit_calvin/HIT/data/table_tennis/clips/test/"
+        self.midframe_root = r"/home/siplab4/chaoen/yoloNhit_calvin/HIT/data/table_tennis/keyframes/test/"
 
     def max_width_n_max_height(self, width, height, targ_size=360):
         if min(width, height) <= targ_size:
