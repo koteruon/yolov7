@@ -11,7 +11,10 @@ def main(is_train=False):
     results_list = list(glob(os.path.join(results_root, 'hit*')))
 
     target_root = r'/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/'
-    video_dir = os.path.join(target_root, 'videos/test/')
+    if is_train:
+        video_dir = os.path.join(target_root, 'videos/train/')
+    else:
+        video_dir = os.path.join(target_root, 'videos/test/')
     if is_train:
         lbl_dir = os.path.join(target_root, 'train/')
     else:
