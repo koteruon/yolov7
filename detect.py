@@ -6,9 +6,10 @@ from pathlib import Path
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
+from numpy import random
+
 from keypoints_detection import KeyPointDetection
 from models.experimental import attempt_load
-from numpy import random
 from process_videos import ProcessVideos
 from utils.datasets import LoadCamera, LoadImages, LoadStreams
 from utils.general import (apply_classifier, check_img_size, check_imshow,
@@ -170,6 +171,8 @@ class YoloV7:
                         s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                     # Write results
+                    most_confidence = -1
+                    most_confidence_ball_xyxy = None
                     for *xyxy, conf, cls in reversed(det):
                         if only_ball:
                             if int(cls) != 0:
@@ -210,15 +213,35 @@ class YoloV7:
                                 if xywh[1] > (numerator / denominator): # y軸在界線之下
                                     continue
 
+                        if opt.only_one_ball:
+                            if int(cls) == 0:
+                                if conf > most_confidence:
+                                    most_confidence = conf
+                                    most_confidence_ball_xyxy = xyxy
+
                         if save_txt:  # Write to file
-                            xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                            line = (cls, *xywh, conf) if opt.save_conf else (cls, *xywh)  # label format
-                            with open(txt_path + ".txt", "a") as f:
-                                f.write(("%g " * len(line)).rstrip() % line + "\n")
+                            if not opt.only_one_ball or int(cls) != 0:
+                                xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                                line = (cls, *xywh, conf) if opt.save_conf else (cls, *xywh)  # label format
+                                with open(txt_path + ".txt", "a") as f:
+                                    f.write(("%g " * len(line)).rstrip() % line + "\n")
 
                         if save_img or view_img:  # Add bbox to image
-                            label = f"{names[int(cls)]} {conf:.2f}"
-                            plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
+                            if not opt.only_one_ball or int(cls) != 0:
+                                label = f"{names[int(cls)]} {conf:.2f}"
+                                plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
+
+                    # 紀錄出信心最高的那一顆球
+                    if opt.only_one_ball and save_txt and most_confidence != -1 and most_confidence_ball_xyxy != None:  # Add bbox to image
+                        xywh = (xyxy2xywh(torch.tensor(most_confidence_ball_xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                        line = (int(0), *xywh, most_confidence) if opt.save_conf else (int(0), *xywh)  # label format
+                        with open(txt_path + ".txt", "a") as f:
+                            f.write(("%g " * len(line)).rstrip() % line + "\n")
+
+                    # 指畫出信心最高的那一顆球
+                    if opt.only_one_ball and view_img and most_confidence != -1 and most_confidence_ball_xyxy != None:  # Add bbox to image
+                        label = f"{names[int(0)]} {most_confidence:.2f}"
+                        plot_one_box(most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=1)
 
                 # Print time (inference + NMS)
                 print(f"{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS")
@@ -293,6 +316,7 @@ if __name__ == "__main__":
     parser.add_argument("--person-botton-boundary", default="", help="person boundary")
     parser.add_argument("--table-top-boundary", default="", help="table boundary")
     parser.add_argument("--table-botton-boundary", default="", help="table boundary")
+    parser.add_argument("--only-one-ball", action="store_true", help="predict ball only the hightest prediction")
     opt = parser.parse_args()
     print(opt)
     # check_requirements(exclude=('pycocotools', 'thop'))
