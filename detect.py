@@ -294,7 +294,7 @@ if __name__ == "__main__":
     parser.add_argument("--device", default="", help="cuda device, i.e. 0 or 0,1,2,3 or cpu")
     parser.add_argument("--view-img", action="store_true", help="display results")
     parser.add_argument(
-        "--save-dir", default="/home/siplab4/chaoen/yoloNhit_calvin/HIT/data/table_tennis", help="save results directory"
+        "--save-dir", default="/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis", help="save results directory"
     )
     parser.add_argument("--save-txt", action="store_true", help="save results to *.txt")
     parser.add_argument("--save-conf", action="store_true", help="save confidences in --save-txt labels")
