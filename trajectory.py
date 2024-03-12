@@ -59,53 +59,52 @@ class Trajectory():
         if half:
             if strictly:
                 # 找出所有递增子序列的起始索引
-                mask = np.concatenate(([False], L[1:] < L[:-1]))
-                # 計算递增子序列的長度
-                lengths = np.diff(np.where(mask)[0])  # 各递增子序列的长度
-                if np.size(lengths) == 0:
+                mask = np.concatenate(([False], L[1:] > L[:-1], [False]))
+            else:
+                mask = np.concatenate(([False], L[1:] >= L[:-1], [False]))
+
+            # 使用 `diff` 函數計算相鄰元素之間的差值
+            diff = np.diff(mask.astype(np.int32))
+            # 查找連續 True 子字串的起始索引
+            start_indices = np.where(diff == 1)[0] + 1
+            # 查找連續 True 子字串的結束索引
+            end_indices = np.where(diff == -1)[0] + 1
+
+            # 計算子字串長度
+            subsequence_lengths = end_indices - start_indices
+            # 計算連續 True 子字串的長度
+            if len(end_indices) > 0:
+                if np.max(subsequence_lengths) > (len(L) // 2):
                     half_strictly_increasing = True
                 else:
-                    max_length_index = np.argmax(lengths)  # 最长递增子序列的索引
-                    # 是否一半是嚴格遞增
-                    half_strictly_increasing = True if lengths[max_length_index] > len(L) else False
+                    half_strictly_increasing = False
+            else:
+                half_strictly_increasing = False
 
+            if strictly:
                 # 找出所有遞減子序列的起始索引
-                mask = np.concatenate(([False], L[1:] > L[:-1]))
-                # 計算遞減子序列的長度
-                lengths = np.diff(np.where(mask)[0])  # 各递增子序列的长度
-                if np.size(lengths) == 0:
+                mask = np.concatenate(([False], L[1:] < L[:-1], [False]))
+            else:
+                mask = np.concatenate(([False], L[1:] <= L[:-1], [False]))
+
+            # 使用 `diff` 函數計算相鄰元素之間的差值
+            diff = np.diff(mask.astype(np.int32))
+            # 查找連續 True 子字串的起始索引
+            start_indices = np.where(diff == 1)[0] + 1
+            # 查找連續 True 子字串的結束索引
+            end_indices = np.where(diff == -1)[0] + 1
+
+            # 計算子字串長度
+            subsequence_lengths = end_indices - start_indices
+            # 計算連續 True 子字串的長度
+            if len(end_indices) > 0:
+                if np.max(subsequence_lengths) > (len(L) // 2):
                     half_strictly_decreasing = True
                 else:
-                    max_length_index = np.argmax(lengths)  # 最长遞減子序列的索引
-                    # 是否一半是嚴格遞減
-                    half_strictly_decreasing = True if lengths[max_length_index] > len(L) else False
-
-                return half_strictly_increasing or half_strictly_decreasing
+                    half_strictly_decreasing = False
             else:
-                # TODO: 這裡又錯!!!!!!!!!!!!!!
-                # 找出所有递增子序列的起始索引
-                mask = np.concatenate(([False], L[1:] <= L[:-1]))
-                # 計算递增子序列的長度
-                lengths = np.diff(np.where(mask)[0])  # 各递增子序列的长度
-                if np.size(lengths) == 0:
-                    half_non_increasing = True
-                else:
-                    max_length_index = np.argmax(lengths)  # 最长递增子序列的索引
-                    # 是否一半是嚴格遞增
-                    half_non_increasing = True if lengths[max_length_index] > len(L) else False
-
-                # 找出所有遞減子序列的起始索引
-                mask = np.concatenate(([False], L[1:] >= L[:-1]))
-                # 計算遞減子序列的長度
-                lengths = np.diff(np.where(mask)[0])  # 各递增子序列的长度
-                if np.size(lengths) == 0:
-                    half_non_decreasing = True
-                else:
-                    max_length_index = np.argmax(lengths)  # 最长遞減子序列的索引
-                    # 是否一半是嚴格遞減
-                    half_non_decreasing = True if lengths[max_length_index] > len(L) else False
-
-                return half_non_increasing or half_non_decreasing
+                half_strictly_decreasing = False
+            return half_strictly_increasing or half_strictly_decreasing
         else:
             if strictly:
                 strictly_increasing = np.all(L[1:] > L[:-1])
@@ -629,7 +628,7 @@ class Trajectory():
             ## 落點預測 ######################################################################################################
             if len(x_tmp) >= 3:
                 # 檢查是否嚴格遞增或嚴格遞減,(軌跡方向是否相同)
-                isSameWay = self.Monotonic(np.array(x_tmp), strictly=False, half=True)
+                isSameWay= self.Monotonic(np.array(x_tmp), strictly=False, half=True)
                 # 累積有三顆球的軌跡且同一方向, 可計算拋物線
                 if isSameWay:
                     parabola = self.Solve_Parabola(np.array(x_tmp), np.array(y_tmp))
@@ -1086,7 +1085,7 @@ class Trajectory():
             label_file = os.path.join(self.label_path, f"{self.video_name}_{self.count}.txt")
             if os.path.exists(label_file):
                 self.Read_Yolo_Label_One_Frame(label_file=label_file)
-            if self.count == 640:
+            if self.count == 568:
                 print("test")
             image_CV, shotspeed = self.Detect_Trajectory(image)
             self.Add_Ball_In_Queue()
