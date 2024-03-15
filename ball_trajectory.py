@@ -15,9 +15,9 @@ WIDTH = 1920
 object_th = 0.5
 person_th = 0.8
 
-v_root = f"./runs/detect/yolov7_202403143/"
-lbl_root = f"./runs/detect/yolov7_202403143/labels"
-result_root = f"./runs/detect/yolov7_202403143/"
+v_root = f"./runs/detect/yolov7_20231122/"
+lbl_root = f"./runs/detect/yolov7_20231122/labels"
+result_root = f"./runs/detect/yolov7_20231122/"
 
 
 def Monotonic(L):
@@ -103,8 +103,13 @@ def perspective_distortion_correlation(miniboard_height, miniboard_width,miniboa
     PT_dict = {}
     PT_data = {"img": image.copy(), "point_x": [], "point_y": []}
     # TODO: 測試用
-    PT_data["point_x"] = [575,405,1674,1475,1475,1526,1674,1595]
-    PT_data["point_y"] = [702,770,775,701,749,777,775,745]
+    # 010六角正手拉黑色
+    PT_data["point_x"] = [565,390,1657,1457,1353,1384,1500,1457]
+    PT_data["point_y"] = [697,766,773,697,697,718,713,697]
+    # TODO 測試用
+    # 010傳統反手拉紅色
+    # PT_data["point_x"] = [575,405,1674,1475,1475,1526,1674,1595]
+    # PT_data["point_y"] = [702,770,775,701,749,777,775,745]
     # TODO 測試用
     # cv2.namedWindow("PIC2 (press Q to quit)", 0)
     # cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
@@ -151,16 +156,22 @@ def subtask(v_name, v_path, lbl_dir):
 
     # 變數
     # 010六角正手拉黑色
-    # shot_split = [(285, 503), (1056, 1250), (1842, 2070), (2634, 2840), (3456, 3660)]
+    shot_split = [
+        (285, 503),
+        # (1056, 1250),
+        (1842, 2070),
+        # (2634, 2840),
+        (3456, 3660)
+    ]
 
     # 010傳統反手拉紅色
-    shot_split = [
-                # (2, 133),
-                (745, 914),
-                (1500, 1641),
-                (2266, 2405),
-                # (2998, 3147)
-    ]
+    # shot_split = [
+    #             # (2, 133),
+    #             (745, 914),
+    #             (1500, 1641),
+    #             (2266, 2405),
+    #             # (2998, 3147)
+    # ]
 
     # 讀取影片
     cap = cv2.VideoCapture(v_path)
@@ -224,6 +235,9 @@ def subtask(v_name, v_path, lbl_dir):
         if not ret:
             break
 
+        if frame_number == 3559:
+            print("frame_number: "+ str(frame_number) )
+
         lbl_cnt = int(lbl.replace(f"{v_name}_", "").split(".")[0])
         if frame_number != lbl_cnt:
             ball_track_list.append((-1, -1, -1, -1))
@@ -282,7 +296,7 @@ def subtask(v_name, v_path, lbl_dir):
                     parabola = Solve_Parabola(np.array(x_tmp), np.array(y_tmp))
                     a, b, c = parabola[0]
                     fit = a * x_c_pred**2 + b * x_c_pred + c
-                    if abs(y_c_pred - fit) >= 5:
+                    if abs(y_c_pred - fit) >= 2:
                         x_last = x_tmp[0]
                         # 預測球在球桌上的落點, x_drop : 本次與前次的中點, y_drop : x_drop 於拋物線上的位置
                         x_drop = int(round((x_c_pred + x_last) / 2, 0))
@@ -482,8 +496,8 @@ def main(num_workers=4):
     # v_path_list = [os.path.join(v_root, v_path) for v_path in os.listdir(v_root)]
     # lbl_dir_list = [os.path.join(lbl_root, v_name) for v_name in v_name_list]
 
-    v_name = "010TraditionalBackhandPullRed"
-    v_path = "./runs/detect/yolov7_202403143/010TraditionalBackhandPullRed.MP4"
+    v_name = "010HexagonalForehandPullBlack"
+    v_path = "./runs/detect/yolov7_20231122/010HexagonalForehandPullBlack.MP4"
     lbl_dir = lbl_root
 
     subtask(v_name, v_path, lbl_dir)
