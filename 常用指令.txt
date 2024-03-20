@@ -18,3 +18,10 @@ ffmpeg -re -stream_loop -1 -i /home/chaoen/yoloNhit_calvin/yolov7/inference/vide
 # yolo 訓練
 ## 記得更改data/coco.yaml
 python train.py --workers 4 --batch-size 3 --data data/coco_only_ball.yaml --img 960 960 --cfg cfg/training/yolov7-e6e.yaml --weights ./weights/yolov7-e6e --name yolov7-e6e_20240313 --hyp data/hyp.scratch.custom.yaml
+python train.py --workers 8 --batch-size 8 --data data/coco.yaml --img 960 960 --cfg cfg/training/yolov7-e6e.yaml --weights weights/yolov7x_3classes.pt --name yolov7-e6e_202310202 --hyp data/hyp.scratch.custom.yaml  --exist-ok
+
+# 影片轉成圖片
+ffmpeg -i input_video.mp4 image_%d.jpg
+
+# 訓練高速相機
+python train.py --workers 6 --batch-size 6 --data data/coco.yaml --img 960 960 --cfg cfg/training/yolov7-e6e.yaml --weights ./weights/yolov7x_3classes --name yolov7-e6e_20240313 --hyp data/hyp.scratch.custom.yaml

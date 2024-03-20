@@ -46,6 +46,37 @@ def Solve_Parabola(X, Y):
     parabola = leastsq(Parabola_Error, p_arg, args=(X, Y))
     return parabola
 
+def Draw_MiniBoard(height, width, edge, upper_left_target, lower_right_target):
+    img_opt = np.zeros([height + edge * 2, width + edge * 2, 3], dtype=np.uint8)
+    cv2.rectangle(
+        img_opt,
+        (edge, edge),
+        (width + edge, height + edge),
+        color=(255, 255, 255),
+        thickness=7,
+    )
+    cv2.rectangle(
+        img_opt,
+        (edge, edge),
+        (width + edge, height + edge),
+        color=(255, 150, 50),
+        thickness=-1,
+    )
+    cv2.line(
+        img_opt,
+        (int(width / 2) + edge, edge),
+        (int(width / 2) + edge, height + edge),
+        (255, 255, 255),
+        5,
+    )
+    cv2.rectangle(
+        img_opt,
+        upper_left_target,
+        lower_right_target,
+        color=(52,192,255),
+        thickness=5,
+    )
+    return img_opt
 
 def Perspective_Transform(matrix, coord):
     # 透視變形轉換
@@ -67,25 +98,30 @@ def Draw_Circle(event, x, y, flags, param):
         param["point_y"].append(y)
 
 
-def perspective_distortion_correlation(image, frame_width, frame_height):
+def perspective_distortion_correlation(miniboard_height, miniboard_width,miniboard_edge, image, frame_width, frame_height):
     # 點選透視變形位置, 順序為:左上,左下,右下,右上
     PT_dict = {}
     PT_data = {"img": image.copy(), "point_x": [], "point_y": []}
     # TODO: 測試用
-    # PT_data["point_x"] = [574, 402, 1649, 1450]
-    # PT_data["point_y"] = [700, 767, 773, 704]
+    # 010六角正手拉黑色
+    PT_data["point_x"] = [565,390,1657,1457,1353,1384,1500,1457]
+    PT_data["point_y"] = [697,766,773,697,697,718,713,697]
     # TODO 測試用
-    cv2.namedWindow("PIC2 (press Q to quit)", 0)
-    cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
-    cv2.setMouseCallback("PIC2 (press Q to quit)", Draw_Circle, PT_data)
-    while True:
-        cv2.imshow("PIC2 (press Q to quit)", PT_data["img"])
-        if cv2.waitKey(2) == ord("q"):
-            print(PT_data)
-            cv2.destroyWindow("PIC2 (press Q to quit)")
-            break
+    # 010傳統反手拉紅色
+    # PT_data["point_x"] = [575,405,1674,1475,1475,1526,1674,1595]
+    # PT_data["point_y"] = [702,770,775,701,749,777,775,745]
+    # TODO 測試用
+    # cv2.namedWindow("PIC2 (press Q to quit)", 0)
+    # cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
+    # cv2.setMouseCallback("PIC2 (press Q to quit)", Draw_Circle, PT_data)
+    # while True:
+    #     cv2.imshow("PIC2 (press Q to quit)", PT_data["img"])
+    #     if cv2.waitKey(2) == ord("q"):
+    #         print(PT_data)
+    #         cv2.destroyWindow("PIC2 (press Q to quit)")
+    #         break
 
-    # PerspectiveTransform
+    # PerspectiveTransform(table)
     upper_left = [PT_data["point_x"][0], PT_data["point_y"][0]]
     lower_left = [PT_data["point_x"][1], PT_data["point_y"][1]]
     lower_right = [PT_data["point_x"][2], PT_data["point_y"][2]]
@@ -93,19 +129,49 @@ def perspective_distortion_correlation(image, frame_width, frame_height):
     pts1 = np.float32([upper_left, lower_left, lower_right, upper_right])
     pts2 = np.float32(
         [
-            [20, 20],  # 白線為2公分(20mm)
-            [20, 1525 + 20],  # 桌寬為152.5公分(1525mm)
-            [2740 + 20, 1525 + 20],  # 桌長為274公分(2740mm)
-            [2740 + 20, 20],
+            [miniboard_edge, miniboard_edge],
+            [miniboard_edge, miniboard_height + miniboard_edge],
+            [miniboard_width + miniboard_edge, miniboard_height + miniboard_edge],
+            [miniboard_width + miniboard_edge, miniboard_edge],
         ]
     )
-    matrix = cv2.getPerspectiveTransform(pts1, pts2)
-    inv = cv2.getPerspectiveTransform(pts2, pts1)
-    return matrix, inv
+    matrix_table = cv2.getPerspectiveTransform(pts1, pts2)
+    inv_table = cv2.getPerspectiveTransform(pts2, pts1)
+
+    # PerspectiveTransform(target)
+    upper_left = (PT_data["point_x"][4], PT_data["point_y"][4])
+    lower_left = (PT_data["point_x"][5], PT_data["point_y"][5])
+    lower_right = (PT_data["point_x"][6], PT_data["point_y"][6])
+    upper_right = (PT_data["point_x"][7], PT_data["point_y"][7])
+
+    upper_left_target = Perspective_Transform(matrix_table, upper_left)
+    lower_left_target = Perspective_Transform(matrix_table, lower_left)
+    lower_right_target = Perspective_Transform(matrix_table, lower_right)
+    upper_right_target = Perspective_Transform(matrix_table, upper_right)
+    return matrix_table, inv_table, upper_left_target, lower_left_target,lower_right_target, upper_right_target
 
 
 def subtask(v_name, v_path, lbl_dir):
     flag = False
+
+    # 變數
+    # 010六角正手拉黑色
+    shot_split = [
+        (285, 503),
+        # (1056, 1250),
+        (1842, 2070),
+        # (2634, 2840),
+        (3456, 3660)
+    ]
+
+    # 010傳統反手拉紅色
+    # shot_split = [
+    #             # (2, 133),
+    #             (745, 914),
+    #             (1500, 1641),
+    #             (2266, 2405),
+    #             # (2998, 3147)
+    # ]
 
     # 讀取影片
     cap = cv2.VideoCapture(v_path)
@@ -117,7 +183,6 @@ def subtask(v_name, v_path, lbl_dir):
         (WIDTH, HEIGHT),
     )
 
-    #
     lbl_list = sorted(
         os.listdir(lbl_dir),
         key=lambda x: int(x.replace(f"{v_name}_", "").split(".")[0]),
@@ -146,12 +211,23 @@ def subtask(v_name, v_path, lbl_dir):
     frame_number = 0
     current_frame = 0
 
+    # 小黑板的設定值
+    miniboard_width = 548
+    miniboard_height = 305
+    miniboard_edge = 20
+    miniboard_text_bias = 60
+
     # 透視變形矯正
-    matrix, inv = perspective_distortion_correlation(frame, frame_width, frame_height)
+    matrix, inv, upper_left_target, lower_left_target,lower_right_target, upper_right_target = perspective_distortion_correlation(miniboard_height, miniboard_width,miniboard_edge,frame, frame_width, frame_height)
+
+    img_opt = Draw_MiniBoard(miniboard_height,miniboard_width,miniboard_edge, upper_left_target, lower_right_target)
 
     # 球速計算變數
     # In order to draw the trajectory of tennis, we need to save the coordinate of preious 12 frames
     q = queue.deque([None for _ in range(12)])
+
+    # 落點計算變數
+    has_landed=False
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -159,7 +235,9 @@ def subtask(v_name, v_path, lbl_dir):
         if not ret:
             break
 
-        # ball_track_list.pop(0)
+        if frame_number == 3559:
+            print("frame_number: "+ str(frame_number) )
+
         lbl_cnt = int(lbl.replace(f"{v_name}_", "").split(".")[0])
         if frame_number != lbl_cnt:
             ball_track_list.append((-1, -1, -1, -1))
@@ -201,21 +279,44 @@ def subtask(v_name, v_path, lbl_dir):
             past_frame_number = frame_number
             print(x_c_pred - past_x_c_pred, (x_c_pred - past_x_c_pred) * (2740.0 / 1011.0), x_speed)
 
-            # x_tmp = [q[j][0] for j in range(5) if q[j] is not None]
-            # y_tmp = [q[j][1] for j in range(5) if q[j] is not None]
+            x_tmp = [q[j][0] for j in range(9) if q[j] is not None]
+            y_tmp = [q[j][1] for j in range(9) if q[j] is not None]
 
             ## 落點預測 ######################################################################################################
-            # if len(x_tmp) >= 3:
-            #     # 檢查是否嚴格遞增或嚴格遞減,(軌跡方向是否相同)
-            #     isSameWay = Monotonic(x_tmp)
-            #     # 累積有三顆球的軌跡且同一方向, 可計算拋物線
-            #     if isSameWay:
-            #         parabola = Solve_Parabola(np.array(x_tmp), np.array(y_tmp))
-            #         a, b, c = parabola[0]
-            #         fit = a * x_c_pred**2 + b * x_c_pred + c
-            #         print(fit)
-            #     else:
-            #         print(isSameWay)
+            # if((0 < len(shot_split) and shot_split[0][0] <= frame_number <= shot_split[0][1])
+            #     or (1 < len(shot_split) and shot_split[1][0] <= frame_number <= shot_split[1][1])
+            #     or (2 < len(shot_split) and shot_split[2][0] <= frame_number <= shot_split[2][1])
+            #     or (3 < len(shot_split) and shot_split[3][0] <= frame_number <= shot_split[3][1])
+            #     or (4 < len(shot_split) and shot_split[4][0] <= frame_number <= shot_split[4][1])):
+            if len(x_tmp) >= 3:
+                # 檢查是否嚴格遞增或嚴格遞減,(軌跡方向是否相同)
+                isSameWay = Monotonic(x_tmp)
+                # 累積有三顆球的軌跡且同一方向, 可計算拋物線
+                if isSameWay:
+                    parabola = Solve_Parabola(np.array(x_tmp), np.array(y_tmp))
+                    a, b, c = parabola[0]
+                    fit = a * x_c_pred**2 + b * x_c_pred + c
+                    if abs(y_c_pred - fit) >= 2:
+                        x_last = x_tmp[0]
+                        # 預測球在球桌上的落點, x_drop : 本次與前次的中點, y_drop : x_drop 於拋物線上的位置
+                        x_drop = int(round((x_c_pred + x_last) / 2, 0))
+                        y_drop = int(round(a * x_drop**2 + b * x_drop + c, 0))
+                        # 透視變形計算本次球體在迷你板上的位置
+                        loc_PT = Perspective_Transform(matrix, (x_drop, y_drop))
+                        if (
+                            loc_PT[0] >= miniboard_edge - 1
+                            and loc_PT[0] < miniboard_width + miniboard_edge + 5
+                            and loc_PT[1] >= miniboard_edge - 5
+                            and loc_PT[1] < miniboard_height + miniboard_edge + 5
+                        ):
+                            # 落點在右側
+                            if loc_PT[0] >= int(miniboard_width / 2) + miniboard_edge:
+                                if not has_landed:
+                                    img_opt = Draw_MiniBoard(miniboard_height,miniboard_width,miniboard_edge, upper_left_target, lower_right_target)
+                                    cv2.circle(img_opt, loc_PT, 5, (0, 0, 255), 4)  # red
+                                    has_landed = True
+                else:
+                    has_landed = False
 
             isball.append((x_c_pred, y_c_pred))
             q.appendleft(isball[-1] if len(isball) != 0 else None)
@@ -258,12 +359,7 @@ def subtask(v_name, v_path, lbl_dir):
             # if stop_idx == 0:
             #     stop_idx = past_[0]
 
-        # 變數
-        # 010六角正手拉黑色
-        shot_split = [(285, 503), (1056, 1250), (1842, 2070), (2634, 2840), (3456, 3660)]
 
-        # 010傳統反手拉紅色
-        # shot_split = [(2, 133), (745, 914), (1500, 1641), (2266, 2405), (2998, 3147)]
         for b_cnt, b_idx in enumerate(past_):
             # if b_idx == stop_idx:
             #     break
@@ -293,17 +389,17 @@ def subtask(v_name, v_path, lbl_dir):
             # cv2.line(frame, (b_cx, b_cy), (past_cx, past_cy), (97, 220, color_R), 5)
 
             if b_cx - past_cx > 0:
-                if shot_split[0][0] <= b_idx <= shot_split[0][1]:
+                if 0 < len(shot_split) and shot_split[0][0] <= b_idx <= shot_split[0][1]:
                     cv2.line(frame, (b_cx, b_cy), (past_cx, past_cy), (0, 255, 255), 3)
-                elif shot_split[1][0] <= b_idx <= shot_split[1][1]:
+                elif 1 < len(shot_split) and shot_split[1][0] <= b_idx <= shot_split[1][1]:
                     cv2.line(frame, (b_cx, b_cy), (past_cx, past_cy), (0, 97, 255), 3)
-                elif shot_split[2][0] <= b_idx <= shot_split[2][1]:
+                elif 2 < len(shot_split) and shot_split[2][0] <= b_idx <= shot_split[2][1]:
                     cv2.line(frame, (b_cx, b_cy), (past_cx, past_cy), (0, 252, 124), 3)
-                elif shot_split[3][0] <= b_idx <= shot_split[3][1]:
+                elif 3 < len(shot_split) and shot_split[3][0] <= b_idx <= shot_split[3][1]:
                     cv2.line(frame, (b_cx, b_cy), (past_cx, past_cy), (255, 255, 0), 3)
-                elif shot_split[4][0] <= b_idx <= shot_split[4][1]:
+                elif 4 < len(shot_split) and shot_split[4][0] <= b_idx <= shot_split[4][1]:
                     cv2.line(frame, (b_cx, b_cy), (past_cx, past_cy), (240, 32, 160), 3)
-        if shot_split[0][0] <= frame_number <= shot_split[0][1]:
+        if 0 < len(shot_split) and shot_split[0][0] <= frame_number <= shot_split[0][1]:
             cv2.putText(
                 frame,
                 f"velocity: {x_speed:.2f} (km/hr)",
@@ -313,7 +409,7 @@ def subtask(v_name, v_path, lbl_dir):
                 (0, 255, 255),
                 2,
             )
-        elif shot_split[1][0] <= frame_number <= shot_split[1][1]:
+        elif 1 < len(shot_split) and shot_split[1][0] <= frame_number <= shot_split[1][1]:
             cv2.putText(
                 frame,
                 f"velocity: {x_speed:.2f} (km/hr)",
@@ -323,7 +419,7 @@ def subtask(v_name, v_path, lbl_dir):
                 (0, 97, 255),
                 2,
             )
-        elif shot_split[2][0] <= frame_number <= shot_split[2][1]:
+        elif 2 < len(shot_split) and shot_split[2][0] <= frame_number <= shot_split[2][1]:
             cv2.putText(
                 frame,
                 f"velocity: {x_speed:.2f} (km/hr)",
@@ -333,7 +429,7 @@ def subtask(v_name, v_path, lbl_dir):
                 (0, 252, 124),
                 2,
             )
-        elif shot_split[3][0] <= frame_number <= shot_split[3][1]:
+        elif 3 < len(shot_split) and shot_split[3][0] <= frame_number <= shot_split[3][1]:
             cv2.putText(
                 frame,
                 f"velocity: {x_speed:.2f} (km/hr)",
@@ -343,7 +439,7 @@ def subtask(v_name, v_path, lbl_dir):
                 (255, 255, 0),
                 2,
             )
-        elif shot_split[4][0] <= frame_number <= shot_split[4][1]:
+        elif 4 < len(shot_split) and shot_split[4][0] <= frame_number <= shot_split[4][1]:
             cv2.putText(
                 frame,
                 f"velocity: {x_speed:.2f} (km/hr)",
@@ -381,6 +477,12 @@ def subtask(v_name, v_path, lbl_dir):
         #             2,
         #             cv2.LINE_AA,
         #         )
+
+        frame[
+            : miniboard_height + miniboard_edge * 2,
+            frame_width - (miniboard_width + miniboard_edge * 2) :,
+        ] = img_opt
+
         new_v.write(frame)
 
     cap.release()
