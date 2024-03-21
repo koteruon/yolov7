@@ -239,7 +239,7 @@ class YoloV7:
                             f.write(("%g " * len(line)).rstrip() % line + "\n")
 
                     # 指畫出信心最高的那一顆球
-                    if opt.only_one_ball and view_img and most_confidence != -1 and most_confidence_ball_xyxy != None:  # Add bbox to image
+                    if opt.only_one_ball and most_confidence != -1 and most_confidence_ball_xyxy != None:  # Add bbox to image
                         label = f"{names[int(0)]} {most_confidence:.2f}"
                         plot_one_box(most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=1)
 
