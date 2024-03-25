@@ -9,6 +9,7 @@ import torch.backends.cudnn as cudnn
 
 from models.experimental import attempt_load
 from process_videos import ProcessVideos
+from trajectory import Trajectory
 from utils.datasets import LoadCamera, LoadImages, LoadStreams
 from utils.general import (apply_classifier, check_img_size, check_imshow,
                            increment_path, non_max_suppression, scale_coords,
@@ -64,10 +65,11 @@ class YoloV7:
             modelc.load_state_dict(torch.load("weights/resnet101.pt", map_location=device)["model"]).to(device).eval()
 
         # Set Dataloader
-        view_img = check_imshow()
-        # view_img = False
+        # view_img = check_imshow()
         cudnn.benchmark = True  # set True to speed up constant image size inference
         dataset = LoadCamera(source, img_size=imgsz, stride=stride)
+        dataset.__iter__()
+        _, _, img0, vid_cap = dataset.__next__()
         process_video = ProcessVideos()
 
         # Get names and colors
@@ -81,8 +83,17 @@ class YoloV7:
         old_img_w = old_img_h = imgsz
         old_img_b = 1
 
-        t0 = time.time()
+        # 即時畫落點init
+        trajectory = Trajectory()
+        frame_height, frame_width, frame_channel = img0.shape
+        framerate = vid_cap.get(cv2.CAP_PROP_FPS)
+        trajectory.Set_Frame_Info(frame_height, frame_width, framerate)
+        trajectory.Mark_Perspective_Distortion_Point(img0, frame_width, frame_height)
+
+        # yolo detect
         for path, img, im0s, vid_cap in dataset:
+            t0 = time_synchronized()
+
             img = torch.from_numpy(img).to(device)
             img = img.half() if half else img.float()  # uint8 to fp16/32
             img /= 255.0  # 0 - 255 to 0.0 - 1.0
@@ -120,6 +131,12 @@ class YoloV7:
                 p, s, im0, frame = "Realtime", "", im0s.copy(), dataset.count
 
                 gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
+
+                # most confidence
+                most_confidence = -1
+                most_confidence_ball_xyxy = None
+                most_confidence_balls = []
+
                 if len(det):
                     # Rescale boxes from img_size to im0 size
                     det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
@@ -129,9 +146,7 @@ class YoloV7:
                         n = (det[:, -1] == c).sum()  # detections per class
                         s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
-                    # Write results
-                    most_confidence = -1
-                    most_confidence_ball_xyxy = None
+
                     for *xyxy, conf, cls in reversed(det):
                         if int(cls) != 0:
                             continue
@@ -151,19 +166,35 @@ class YoloV7:
                         if conf > most_confidence:
                             most_confidence = conf
                             most_confidence_ball_xyxy = xyxy
+                            most_confidence_balls.append([int(cls.item()), *xywh])
 
                     # 指畫出信心最高的那一顆球
-                    if view_img and most_confidence != -1 and most_confidence_ball_xyxy != None:  # Add bbox to image
+                    if most_confidence != -1 and most_confidence_ball_xyxy != None:  # Add bbox to image
                         label = f"{names[int(0)]} {most_confidence:.2f}"
                         plot_one_box(most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=1)
 
-                # Print time (inference + NMS)
-                print(f"{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS")
+                    # 取得球的位置
+                    if most_confidence_balls:
+                        trajectory.Read_Yolo_Label_One_Frame(balls=most_confidence_balls)
+
+                # 畫出軌跡
+                image_CV, shotspeed = trajectory.Detect_Trajectory(im0)
+                trajectory.Add_Ball_In_Queue()
+                ball_direction, ball_direction_last = trajectory.Detect_Ball_Direction(shotspeed)
+                image_CV = trajectory.Draw_On_Image(image_CV, shotspeed, ball_direction)
+                trajectory.Next_Count()
 
                 # Stream results
                 if view_img:
-                    cv2.imshow(str(p), im0)
-                    cv2.waitKey(1)  # 1 millisecond
+                    cv2.imshow(str(p), image_CV)
+
+                t4 = time_synchronized()
+
+                # Print time (inference + NMS)
+                print(f"{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS, ({(1E3 * (t4 - t0)):.1f}ms) Total time")
+
+
+
 
 
 if __name__ == "__main__":

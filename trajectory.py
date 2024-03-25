@@ -547,8 +547,8 @@ class Trajectory():
         # 點選透視變形位置, 順序為:左上,左下,右下,右上
         PT_data = {"img": image.copy(), "point_x": [], "point_y": []}
         # TODO: 測試用
-        PT_data["point_x"] = [465,427,1381,1319]
-        PT_data["point_y"] = [674,787,794,680]
+        PT_data["point_x"] = [521,434,1567,1531]
+        PT_data["point_y"] = [423,574,550,395]
         # TODO 測試用
         # cv2.namedWindow("PIC2 (press Q to quit)", 0)
         # cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
@@ -923,7 +923,7 @@ class Trajectory():
                 1,
                 cv2.LINE_AA,
             )
-        if ball_direction is not None:
+        elif ball_direction is not None:
             cv2.putText(
                 image_CV,
                 "              " + str(shotspeed),
@@ -1060,6 +1060,9 @@ class Trajectory():
         self.frame_width = frame_width
         self.framerate = framerate
 
+    def Next_Count(self):
+        self.count += 1
+
     ### 後處理從此開始 ###
     def main(self):
         # 讀影片
@@ -1092,7 +1095,7 @@ class Trajectory():
             ball_direction, ball_direction_last = self.Detect_Ball_Direction(shotspeed)
             image_CV = self.Draw_On_Image(image_CV, shotspeed, ball_direction)
 
-            self.count += 1
+            self.Next_Count()
             if self.count >= total_frames - 12:
                 break
             output.write(image_CV)
