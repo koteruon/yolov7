@@ -25,6 +25,7 @@ from torchvision.ops import ps_roi_align, ps_roi_pool, roi_align, roi_pool
 from torchvision.utils import save_image
 from tqdm import tqdm
 
+from trajectory import Trajectory
 from utils.general import (check_requirements, clean_str, resample_segments,
                            segment2box, segments2boxes, xyn2xy, xywh2xyxy,
                            xywhn2xyxy, xyxy2xywh)
@@ -263,12 +264,21 @@ class LoadWebcam:  # for inference
         return 0
 
 class LoadCamera:  # for inference
+    def trajectory_init(self, img0):
+        self.trajectory = Trajectory(real_time=True)
+        frame_height, frame_width, frame_channel = img0.shape
+        framerate = self.cap.get(cv2.CAP_PROP_FPS)
+        self.trajectory.Set_Frame_Info(frame_height, frame_width, framerate)
+        self.trajectory.Mark_Perspective_Distortion_Point(img0, frame_width, frame_height)
+
     def __init__(self, device='/dev/vidoe0' ,img_size=640, stride=32):
         self.img_size = img_size
         self.stride = stride
         self.mode = 'video'
         self.cap = cv2.VideoCapture(device)  # video capture object
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)  # set buffer size
+        ret_val, img0 = self.cap.read()
+        self.trajectory_init(img0) # 落點
 
     def __iter__(self):
         self.count = -1
@@ -276,13 +286,44 @@ class LoadCamera:  # for inference
 
     def __next__(self):
         self.count += 1
+
+        # Read frame
+        ret_val, img0 = self.cap.read()
+
         if cv2.waitKey(1) == ord('q'):  # q to quit
+            self.trajectory.Write_Bounce_Location()
+            # output bouncing analyze img
+            self.trajectory.Draw_Bounce_Analysis()
+            self.trajectory.Save_Bounce_Analysis()
+            # For saving bounce map.
+            self.trajectory.Save_Bounce_Location()
+            # For saving bounce map.
+            self.trajectory.Save_Bounce_Location()
+            # For saving speedHist
+            self.trajectory.Draw_SpeedHist()
+
             self.cap.release()
             cv2.destroyAllWindows()
             raise StopIteration
 
-        # Read frame
-        ret_val, img0 = self.cap.read()
+        if cv2.waitKey(1) == ord('e'):  # e to end
+            if self.trajectory:
+                self.trajectory.Write_Bounce_Location()
+                # output bouncing analyze img
+                self.trajectory.Draw_Bounce_Analysis()
+                self.trajectory.Save_Bounce_Analysis()
+                # For saving bounce map.
+                self.trajectory.Save_Bounce_Location()
+                # For saving bounce map.
+                self.trajectory.Save_Bounce_Location()
+                # For saving speedHist
+                self.trajectory.Draw_SpeedHist()
+                del self.trajectory
+                self.trajectory = None
+
+        if cv2.waitKey(1) == ord('s'):  # s to start
+            if not self.trajectory:
+                self.trajectory_init(img0) # 落點
 
         # Print
         assert ret_val, f'Camera Error {self.device}'
@@ -296,7 +337,7 @@ class LoadCamera:  # for inference
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
         img = np.ascontiguousarray(img)
 
-        return img_path, img, img0, self.cap
+        return img_path, img, img0, self.cap, self.trajectory
 
     def __len__(self):
         return 0

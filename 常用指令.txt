@@ -13,7 +13,7 @@ ffmpeg -y -f decklink -i 'DeckLink Quad HDMI Recorder (3)' -pix_fmt bgr24 -times
 ffmpeg -i input.mp4 -vf setpts=4*PTS -r 30 output.mp4
 
 # 循環播放影片到 /dev/video0
-ffmpeg -re -stream_loop -1 -i /home/chaoen/yoloNhit_calvin/yolov7/inference/videos/C00050015.mp4 -map 0:v -f v4l2 /dev/video0
+ffmpeg -re -stream_loop -1 -i /home/chaoen/yoloNhit_calvin/yolov7/inference/videos_long/0010.mp4 -map 0:v -f v4l2 /dev/video0
 
 # yolo 訓練
 ## 記得更改data/coco.yaml

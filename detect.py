@@ -6,10 +6,9 @@ from pathlib import Path
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
-from numpy import random
-
 from keypoints_detection import KeyPointDetection
 from models.experimental import attempt_load
+from numpy import random
 from process_videos import ProcessVideos
 from utils.datasets import LoadCamera, LoadImages, LoadStreams
 from utils.general import (apply_classifier, check_img_size, check_imshow,

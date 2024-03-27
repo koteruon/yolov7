@@ -9,7 +9,6 @@ import numpy as np
 import torch
 from torchvision import transforms
 from tqdm import tqdm
-
 from utils.datasets import letterbox
 from utils.general import non_max_suppression_kpt
 from utils.plots import output_to_keypoint

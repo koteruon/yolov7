@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import json
 import math
 import os
@@ -163,15 +164,12 @@ class Trajectory():
         return heatmap * mag
 
 
-    def Count_BounceLocation(self, frame, location_list, height, width):
+    def Count_BounceLocation(self, frame):
         # 落點分析 bounce analyize function
-        row = int(frame[0] / int(width / 4))
-        column = int(frame[1] / int(height / 3))
-        for i in range(4):
-            for j in range(3):
-                if row == i and column == j:
-                    location_list[i][j] += 1
-        return location_list
+        row = int(frame[0] / int(self.miniboard_width / 4))
+        column = int(frame[1] / int(self.miniboard_height / 3))
+        if 0 <= row < 4 and 0 <= column < 3:
+            self.bounce_location_list[row][column] += 1
 
 
     def Detect_Color_Level(self, score, side, side_min, side_max):
@@ -202,65 +200,46 @@ class Trajectory():
 
     def Draw_Bounce_Analysis(self):
         # 落點分析圖
-        left_bounce_sum = 0
-        right_bounce_sum = 0
-        score_table = np.zeros([4, 3], dtype=int)
-        left_score = 0
-        right_score = 0
-        left_score_max = 0
-        left_score_min = 0
-        right_score_max = 0
-        right_score_min = 0
-        text = ""
+        self.bounce_analyze_img = self.Draw_MiniBoard("bounce")
+        score_table = np.zeros((4, 3), dtype=int)
+
         # calculate side sum
-        for i in range(4):
-            for j in range(3):
-                if i < 2:  # left
-                    left_bounce_sum += self.bounce_location_list[i][j]
-                else:  # right
-                    right_bounce_sum += self.bounce_location_list[i][j]
-        # print("left_sum: ",left_bounce_sum,"right_sum: ",right_bounce_sum)
+        left_bounce_sum = np.sum(self.bounce_location_list[:2])
+        right_bounce_sum = np.sum(self.bounce_location_list[2:])
+
         # calculate side score
-        for i in range(4):
-            for j in range(3):
-                if i < 2:
-                    if left_bounce_sum == 0:
-                        score_table[i][j] = 0
-                    else:
-                        score_table[i][j] = int(np.round((self.bounce_location_list[i][j] / left_bounce_sum) * 100, 0))
-                else:
-                    if right_bounce_sum == 0:
-                        score_table[i][j] = 0
-                    else:
-                        score_table[i][j] = int(np.round((self.bounce_location_list[i][j] / right_bounce_sum) * 100, 0))
-        # print("score_table",score_table)
+        ### Calculate score for left side
+        if left_bounce_sum != 0:
+            left_scores = np.round((self.bounce_location_list[:2] / left_bounce_sum) * 100).astype(int)
+        else:
+            left_scores = np.zeros((2, 3), dtype=int)
+        ### Calculate score for right side
+        if right_bounce_sum != 0:
+            right_scores = np.round((self.bounce_location_list[2:] / right_bounce_sum) * 100).astype(int)
+        else:
+            right_scores = np.zeros((2, 3), dtype=int)
+        ### Assign scores to score_table
+        score_table[:2] = left_scores
+        score_table[2:] = right_scores
 
         # find max and min
-        left_score_min = score_table[0][0]
-        left_score_max = score_table[0][0]
-        right_score_min = score_table[2][0]
-        right_score_max = score_table[2][0]
+        ### Find min and max for left side
+        left_score_min = np.min(score_table[:2])
+        left_score_max = np.max(score_table[:2])
+
+        ### Find min and max for right side
+        right_score_min = np.min(score_table[2:])
+        right_score_max = np.max(score_table[2:])
 
         for i in range(4):
             for j in range(3):
                 if i < 2:
-                    left_score = score_table[i][j]
-                    if left_score < left_score_min:
-                        left_score_min = left_score
-                    if left_score > left_score_max:
-                        left_score_max = left_score
+                    # left
+                    color_detect = self.Detect_Color_Level(score_table[i][j], "left", left_score_min, left_score_max)
                 else:
-                    right_score = score_table[i][j]
-                    if right_score < right_score_min:
-                        right_score_min = right_score
-                    if right_score > right_score_max:
-                        right_score_max = right_score
-
-        for i in range(2):
-            for j in range(3):
-                color_detect = self.Detect_Color_Level(score_table[i][j], "left", left_score_min, left_score_max)
+                    # right
+                    color_detect = self.Detect_Color_Level(score_table[i][j], "right", right_score_min, right_score_max)
                 text = str(score_table[i][j]) + "%"
-                #   print("color detect:",color_detect)
                 cv2.rectangle(
                     self.bounce_analyze_img,
                     (
@@ -287,43 +266,27 @@ class Trajectory():
                     1,
                     cv2.LINE_AA,
                 )
-        for i in range(2, 4):
-            for j in range(3):
-                color_detect = self.Detect_Color_Level(score_table[i][j], "right", right_score_min, right_score_max)
-                text = str(score_table[i][j]) + "%"
-                #   print("color detect:",color_detect)
-                cv2.rectangle(
-                    self.bounce_analyze_img,
-                    (
-                        self.miniboard_edge + (i * int(self.miniboard_width / 4)) + 10,
-                        self.miniboard_edge + (j * int(self.miniboard_height / 3)) + 10,
-                    ),
-                    (
-                        ((i + 1) * int(self.miniboard_width / 4)) + self.miniboard_edge - 10,
-                        ((j + 1) * int(self.miniboard_height / 3)) + self.miniboard_edge - 10,
-                    ),
-                    color=color_detect,
-                    thickness=-1,
-                )
-                cv2.putText(
-                    self.bounce_analyze_img,
-                    text,
-                    (
-                        self.miniboard_edge + (i * int(self.miniboard_width / 4)) + self.miniboard_edge * 2,
-                        self.miniboard_edge + (j * int(self.miniboard_height / 3)) + self.miniboard_text_bias,
-                    ),
-                    cv2.FONT_HERSHEY_COMPLEX_SMALL,
-                    1,
-                    (1, 1, 1),
-                    1,
-                    cv2.LINE_AA,
-                )
+    def Show_Bounce_Analysis(self):
+        cv2.imshow(self.bounce_analysis_title, self.bounce_analyze_img)
 
+    def Save_Bounce_Analysis(self):
+        cv2.imwrite(
+            f"{self.analysis_img_path}/{self.video_name}_analysis.jpg",
+            self.bounce_analyze_img,
+        )
 
-    def Draw_SpeedHist(self):
+    def Show_Bounce_Location(self):
+        cv2.imshow(self.bounce_location_title, self.img_opt_bounce_location)
+
+    def Save_Bounce_Location(self):
+        cv2.imwrite(
+            f"{self.bounce_img_path}/{self.video_name}_bounce.jpg",
+            self.img_opt_bounce_location,
+        )
+
+    def Draw_SpeedHist(self, save=True, show=False):
         # 繪製速度直方圖
         stroke_length = 0
-        shots_list = []
         # 平衡左右 list ??
         if len(self.left_speed_list) > len(self.right_speed_list):
             stroke_length = len(self.left_speed_list)
@@ -334,12 +297,10 @@ class Trajectory():
             for i in range(len(self.right_speed_list) - len(self.left_speed_list)):
                 self.left_speed_list.append(0)
 
-        for i in range(stroke_length):
-            shots_list.append(i + 1)
+        shots_list = np.arange(1, stroke_length + 1)
 
         label_left = f"left_player mean:{str(round(np.mean(self.left_speed_list),2))}"
         label_right = f"right_player mean:{str(round(np.mean(self.right_speed_list),2))}"
-        # bins = np.linspace(0, 10, 10)
         plt.figure(figsize=(15, 10), dpi=100, linewidth=2)
         plt.plot(shots_list, self.left_speed_list, "s-", color="royalblue", label=label_left)
         plt.plot(shots_list, self.right_speed_list, "o-", color="darkorange", label=label_right)
@@ -349,7 +310,13 @@ class Trajectory():
         plt.xlabel(f"shots", fontsize=30, labelpad=15)
         plt.ylabel(f"Km/hr", fontsize=30, labelpad=20)
         plt.legend(loc="best", fontsize=20)
-        plt.savefig(f"shot_speed_compare.png")
+        if save:
+            plt.savefig(os.path.join(self.speedhis_path, f"{self.video_name}_shot_speedhis.png"))
+        if show:
+            fig = plt.gcf()
+            fig.canvas.draw()
+            fig_img = np.array(fig.canvas.renderer.buffer_rgba())
+            cv2.imshow(self.speedhis_title, cv2.cvtColor(fig_img, cv2.COLOR_RGBA2BGR))
         plt.clf()
 
         plt.figure(figsize=(15, 10), dpi=100, linewidth=2)
@@ -358,9 +325,14 @@ class Trajectory():
         plt.xlabel(f"Km/hr", fontsize=30, labelpad=15)
         plt.ylabel(f"shots", fontsize=30, labelpad=20)
         plt.legend(loc="upper right")
-        plt.savefig(f"shot_speed_compare_2.png")
+        if save:
+            plt.savefig(os.path.join(self.speed_distribution_path, f"{self.video_name}_shot_speed_distribution.png"))
+        if show:
+            fig = plt.gcf()
+            fig.canvas.draw()
+            fig_img = np.array(fig.canvas.renderer.buffer_rgba())
+            cv2.imshow(self.speed_distribution_title, cv2.cvtColor(fig_img, cv2.COLOR_RGBA2BGR))
         plt.clf()
-        # plt.show()
 
 
     def Draw_MiniBoard(self, option=None):
@@ -444,17 +416,18 @@ class Trajectory():
             4,
         )
         # analyze location
-        bll = self.Count_BounceLocation(
-            self.PT_dict[self.count],
-            self.bounce_location_list,
-            self.miniboard_height,
-            self.miniboard_width,
+        self.Count_BounceLocation(
+            self.PT_dict[self.count]
         )
+        if self.is_show_bounce_analysis:
+            self.Draw_Bounce_Analysis()
+            self.Show_Bounce_Analysis()
+        if self.is_show_bounce_location:
+            self.Show_Bounce_Location()
         p_inv = self.Perspective_Transform(self.inv, loc_PT)
         self.bounce.append([self.count, p_inv[0], p_inv[1]])
         self.q_bv.appendleft(p_inv)
         self.q_bv.pop()
-        return bll
 
     def Create_Output_Dir(self, output_path, video_name):
         # 建立輸出檔案夾
@@ -489,6 +462,16 @@ class Trajectory():
         keypoints_path.mkdir(parents=True, exist_ok=True)
         keypoints_path = Path(output_path.joinpath("keypoints"))
         keypoints_path = keypoints_path.as_posix()
+        # 建立球速直方圖
+        speedhis_path = Path(output_path.joinpath("speedhis"))
+        speedhis_path.mkdir(parents=True, exist_ok=True)
+        speedhis_path = Path(output_path.joinpath("speedhis"))
+        speedhis_path = speedhis_path.as_posix()
+        # 建立球速直方圖
+        speed_distribution_path = Path(output_path.joinpath("speed_distribution"))
+        speed_distribution_path.mkdir(parents=True, exist_ok=True)
+        speed_distribution_path = Path(output_path.joinpath("speed_distribution"))
+        speed_distribution_path = speed_distribution_path.as_posix()
 
         return (
             video_path,
@@ -498,6 +481,8 @@ class Trajectory():
             bounce_loc_path,
             bounce_img_path,
             keypoints_path,
+            speedhis_path,
+            speed_distribution_path
         )
 
     def Read_Video(self):
@@ -547,18 +532,18 @@ class Trajectory():
         # 點選透視變形位置, 順序為:左上,左下,右下,右上
         PT_data = {"img": image.copy(), "point_x": [], "point_y": []}
         # TODO: 測試用
-        PT_data["point_x"] = [521,434,1567,1531]
-        PT_data["point_y"] = [423,574,550,395]
+        # PT_data["point_x"] = [488,432,1383,1319]
+        # PT_data["point_y"] = [675,789,796,679]
         # TODO 測試用
-        # cv2.namedWindow("PIC2 (press Q to quit)", 0)
-        # cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
-        # cv2.setMouseCallback("PIC2 (press Q to quit)", self.Draw_Circle, PT_data)
-        # while True:
-        #     cv2.imshow("PIC2 (press Q to quit)", PT_data["img"])
-        #     if cv2.waitKey(2) == ord("q"):
-        #         print(PT_data)
-        #         cv2.destroyWindow("PIC2 (press Q to quit)")
-        #         break
+        cv2.namedWindow("PIC2 (press Q to quit)", 0)
+        cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
+        cv2.setMouseCallback("PIC2 (press Q to quit)", self.Draw_Circle, PT_data)
+        while True:
+            cv2.imshow("PIC2 (press Q to quit)", PT_data["img"])
+            if cv2.waitKey(2) == ord("q"):
+                print(PT_data)
+                cv2.destroyWindow("PIC2 (press Q to quit)")
+                break
 
         # PerspectiveTransform
         upper_left = [PT_data["point_x"][0], PT_data["point_y"][0]]
@@ -581,6 +566,14 @@ class Trajectory():
         self.img_opt = self.Draw_MiniBoard()
         self.img_opt_bounce_location = self.Draw_MiniBoard("bounce")
         self.bounce_analyze_img = self.Draw_MiniBoard("bounce")
+
+        # 顯示
+        if self.is_show_bounce_analysis:
+            self.Draw_Bounce_Analysis()
+            self.Show_Bounce_Analysis()
+        if self.is_show_bounce_location:
+            self.Show_Bounce_Location()
+
 
     def Read_Yolo_Label_One_Frame(self, label_file=None, balls=None):
         if balls == None:
@@ -613,10 +606,6 @@ class Trajectory():
         return args
 
     def Detect_Trajectory(self, image):
-        # 參數
-        shotspeed = 0
-        shotspeed_previous = 0
-
         # 針對每一貞做運算
         image_CV = image.copy()
 
@@ -699,7 +688,7 @@ class Trajectory():
                                         )
                                         # D1的距離，單位是CM
                                         speed_bounce_distance_right = abs(
-                                            shotspeed_previous
+                                            self.shotspeed_previous
                                             * (100000 / 3600)
                                             * (self.right_shot_count - self.bounce_frame_R)
                                             / self.framerate
@@ -717,10 +706,12 @@ class Trajectory():
                                         if self.speed_right > 100:
                                             self.speed_right = 99
 
-                                        shotspeed = self.speed_right
-                                        shotspeed_previous = self.speed_right
+                                        self.shotspeed = self.speed_right
+                                        self.shotspeed_previous = self.speed_right
                                         print(f"Frame : {self.count} self.speed_right : {self.speed_right} ")
                                         self.right_speed_list.append(self.speed_right)
+                                        if self.is_show_speed_analysis:
+                                            self.Draw_SpeedHist(save=False, show=self.is_show_speed_analysis)
                                     self.is_first_ball = False
                                     self.hit_count += 1
                                     self.now_player = 1
@@ -780,7 +771,7 @@ class Trajectory():
                                             self.PT_dict[self.count][1],
                                         )
                                         speed_bounce_distance_left = abs(
-                                            shotspeed_previous
+                                            self.shotspeed_previous
                                             * (100000 / 3600)
                                             * (self.left_shot_count - self.bounce_frame_L)
                                             / self.framerate
@@ -797,10 +788,12 @@ class Trajectory():
                                         if self.speed_left > 100:
                                             self.speed_left = 60
 
-                                        shotspeed = self.speed_left
-                                        shotspeed_previous = self.speed_left
+                                        self.shotspeed = self.speed_left
+                                        self.shotspeed_previous = self.speed_left
                                         print(f"Frame : {self.count} self.speed_left : {self.speed_left} ")
                                         self.left_speed_list.append(self.speed_left)
+                                        if self.is_show_speed_analysis:
+                                            self.Draw_SpeedHist(save=False, show=self.is_show_speed_analysis)
                                     self.is_first_ball = False
                                     self.hit_count += 1
                                     self.now_player = 0
@@ -835,7 +828,7 @@ class Trajectory():
                 self.bounce_frame_L, self.bounce_frame_R = -1, -1
                 self.hit_count = 0
 
-        return image_CV, shotspeed
+        return image_CV
 
     def Add_Ball_In_Queue(self):
         self.q.appendleft((self.x_c_pred, self.y_c_pred) if self.x_c_pred!=np.inf and self.y_c_pred!=np.inf else None)
@@ -844,33 +837,33 @@ class Trajectory():
         self.q_bv.appendleft(None)
         self.q_bv.pop()
 
-    def Detect_Ball_Direction(self, shotspeed):
+    def Detect_Ball_Direction(self):
         ball_direction, ball_direction_last = None, None
         if self.q[0] is not None and self.q[1] is not None and self.q[2] is not None:
             ball_direction = self.q[0][0] - self.q[1][0]
             ball_direction_last = self.q[1][0] - self.q[2][0]
             if self.MAX_velo == 0:
-                self.MAX_velo = shotspeed
+                self.MAX_velo = self.shotspeed
             if ball_direction > 0:  # Direction right
                 if ball_direction_last >= 0:
                     self.right_shot_count = self.count
-                    if shotspeed > self.MAX_velo:
-                        self.MAX_velo = shotspeed
+                    if self.shotspeed > self.MAX_velo:
+                        self.MAX_velo = self.shotspeed
                 else:
                     self.MAX_velo = 0
 
             elif ball_direction < 0:  # Direction left
                 if ball_direction_last <= 0:
                     self.left_shot_count = self.count
-                    if shotspeed > self.MAX_velo:
-                        self.MAX_velo = shotspeed
+                    if self.shotspeed > self.MAX_velo:
+                        self.MAX_velo = self.shotspeed
                 else:
                     self.MAX_velo = 0
 
         return ball_direction, ball_direction_last
 
 
-    def Draw_On_Image(self, image_CV, shotspeed, ball_direction):
+    def Draw_On_Image(self, image_CV, ball_direction):
         # draw current frame prediction and previous 11 frames as yellow circle, total: 12 frames
         for i in range(12):
             if self.q[i] is not None:
@@ -926,7 +919,7 @@ class Trajectory():
         elif ball_direction is not None:
             cv2.putText(
                 image_CV,
-                "              " + str(shotspeed),
+                "              " + str(self.shotspeed),
                 (10, 100),
                 cv2.FONT_HERSHEY_TRIPLEX,
                 1,
@@ -991,6 +984,10 @@ class Trajectory():
 
         return image_CV
 
+    def Write_Bounce_Location(self):
+        bounce_loc_pd = pd.DataFrame(self.bounce_location_list)
+        bounce_loc_pd.to_csv(f"{self.bounce_loc_path}/{self.video_name}_bounce_list.csv", index=False)
+
     def __init__(self,real_time=False):
         self.HEIGHT = 288  # model input size
         self.WIDTH = 512
@@ -1012,6 +1009,8 @@ class Trajectory():
             self.bounce_loc_path,
             self.bounce_img_path,
             keypoints_path,
+            self.speedhis_path,
+            self.speed_distribution_path
         ) = self.Create_Output_Dir(output_path, self.video_name)
 
         # yolo labels path
@@ -1042,7 +1041,7 @@ class Trajectory():
         # 參數
         self.bounce = []
         self.left_speed_list, self.right_speed_list = [], []
-        self.bounce_location_list = [[0 for _ in range(3)] for _ in range(4)]
+        self.bounce_location_list = np.zeros((4, 3), dtype=int)
         self.bouncing_offset_x, self.bouncing_offset_y = 10, 15  # bouncing location offset
         self.speed_left, self.speed_right = 0, 0  # 左右選手球速
         self.bounce_frame_L, self.bounce_frame_R = -1, -1  # 出現落點的Frame
@@ -1054,6 +1053,27 @@ class Trajectory():
         self.x_c_pred, self.y_c_pred = np.inf, np.inf  # 球體中心位置
         self.is_first_ball = True #每局第一球的時候frame只要5個，其他時間要9個
         self.is_serve_wait = False
+        self.shotspeed = 0
+        self.shotspeed_previous = 0
+
+        # 顯示參數
+        self.is_show_bounce_analysis = False
+        self.is_show_bounce_location = False
+        self.is_show_speed_analysis = False
+        if real_time:
+            self.is_show_bounce_analysis = True
+            self.bounce_analysis_title = "Bounce Analysis"
+            cv2.namedWindow(self.bounce_analysis_title, cv2.WINDOW_NORMAL)
+            self.is_show_bounce_location = True
+            self.bounce_location_title = "Bounce Location"
+            cv2.namedWindow(self.bounce_location_title, cv2.WINDOW_NORMAL)
+            self.is_show_speed_analysis = True
+            self.speedhis_title = "Speed Histogram"
+            cv2.namedWindow(self.speedhis_title, cv2.WINDOW_NORMAL)
+            self.speed_distribution_title = "Speed Distribution"
+            cv2.namedWindow(self.speed_distribution_title, cv2.WINDOW_NORMAL)
+            self.Draw_SpeedHist(save=False, show=True)
+            self.video_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     def Set_Frame_Info(self,frame_height, frame_width, framerate):
         self.frame_height = frame_height
@@ -1090,10 +1110,10 @@ class Trajectory():
                 self.Read_Yolo_Label_One_Frame(label_file=label_file)
             if self.count == 568:
                 print("test")
-            image_CV, shotspeed = self.Detect_Trajectory(image)
+            image_CV = self.Detect_Trajectory(image)
             self.Add_Ball_In_Queue()
-            ball_direction, ball_direction_last = self.Detect_Ball_Direction(shotspeed)
-            image_CV = self.Draw_On_Image(image_CV, shotspeed, ball_direction)
+            ball_direction, ball_direction_last = self.Detect_Ball_Direction()
+            image_CV = self.Draw_On_Image(image_CV, ball_direction)
 
             self.Next_Count()
             if self.count >= total_frames - 12:
@@ -1106,21 +1126,17 @@ class Trajectory():
         output.release()
 
         # write bouncing list to csv file
-        bounce_loc_pd = pd.DataFrame(self.bounce_location_list)
-        bounce_loc_pd.to_csv(f"{self.bounce_loc_path}/{self.video_name}_bounce_list.csv", index=False)
+        self.Write_Bounce_Location()
 
         # output bouncing analyze img
         self.Draw_Bounce_Analysis()
-        cv2.imwrite(
-            f"{self.analysis_img_path}/{self.video_name}_analysis.jpg",
-            self.bounce_analyze_img,
-        )
+        self.Save_Bounce_Analysis()
 
         # For saving bounce map.
-        cv2.imwrite(
-            f"{self.bounce_img_path}/{self.video_name}_bounce.jpg",
-            self.img_opt_bounce_location,
-        )
+        self.Save_Bounce_Location()
+
+        # For saving speedHist
+        self.Draw_SpeedHist()
 
         end = time.time()
         print(f"Write video time: {end-start} seconds.")
