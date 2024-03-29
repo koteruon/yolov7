@@ -1,11 +1,15 @@
 import argparse
 import re
+import sys
 import time
 from pathlib import Path
 
 import cv2
+import numpy as np
+import tensorflow.keras.backend as K
 import torch
 import torch.backends.cudnn as cudnn
+from tensorflow.keras.models import load_model
 
 from models.experimental import attempt_load
 from process_videos import ProcessVideos
@@ -19,6 +23,39 @@ from utils.torch_utils import (TracedModel, load_classifier, select_device,
 
 
 class YoloV7:
+    def TrackNet_Custom_Loss(self, y_true, y_pred):
+        # Loss function
+        loss = (-1) * (
+            K.square(1 - y_pred) * y_true * K.log(K.clip(y_pred, K.epsilon(), 1))
+            + K.square(y_pred) * (1 - y_true) * K.log(K.clip(1 - y_pred, K.epsilon(), 1))
+        )
+        return K.mean(loss)
+
+    def TrackNet_Predict_Ball_Center(self, ratio, pred):
+        pred[pred > 0.5] = 1
+        pred[pred <= 0.5] = 0
+        h_pred = pred[0] * 255
+        h_pred = h_pred.astype("uint8")
+        x_c_pred, y_c_pred = None, None
+        if np.amax(h_pred[-1]) > 0:
+            (cnts, _) = cv2.findContours(h_pred[-1].copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            rects = [cv2.boundingRect(ctr) for ctr in cnts]
+            # 找到最大框選區域
+            max_area = -1
+            max_area_idx = None
+            for j in range(len(rects)):
+                area = rects[j][2] * rects[j][3]
+                if area > max_area:
+                    max_area_idx = j
+                    max_area = area
+            target = rects[max_area_idx]
+            # 計算框選中心點
+            (x_c_pred, y_c_pred) = (
+                int(ratio * (target[0] + target[2] / 2)),
+                int(ratio * (target[1] + target[3] / 2)),
+            )
+        return x_c_pred, y_c_pred
+
     def max_width_n_max_height(self, width, height, targ_size=360):
         if min(width, height) <= targ_size:
             new_width, new_height = width, height
@@ -47,15 +84,23 @@ class YoloV7:
         half = device.type != "cpu"  # half precision only supported on CUDA
 
         # Load model
-        model = attempt_load(weights, map_location=device)  # load FP32 model
-        stride = int(model.stride.max())  # model stride
-        imgsz = check_img_size(imgsz, s=stride)  # check img_size
-
-        if trace:
-            model = TracedModel(model, device, opt.img_size)
-
-        if half:
-            model.half()  # to FP16
+        if opt.model_choices == 'yolo':
+            model = attempt_load(weights, map_location=device)  # load FP32 model
+            stride = int(model.stride.max())  # model stride
+            imgsz = check_img_size(imgsz, s=stride)  # check img_size
+            if trace:
+                model = TracedModel(model, device, opt.img_size)
+            if half:
+                model.half()  # to FP16
+        elif opt.model_choices == 'tracknet':
+            sys.path.append("../12_in_12_out_pytorch")
+            model = load_model(opt.tracknet_weights, custom_objects={"custom_loss": self.TrackNet_Custom_Loss})
+            stride = None
+            frame_height = 1080
+            HEIGHT = 288  # model input size
+            WIDTH = 512
+            imgsz = (HEIGHT, WIDTH)
+            ratio = frame_height / HEIGHT
 
         # Second-stage classifier
         classify = False
@@ -66,19 +111,21 @@ class YoloV7:
         # Set Dataloader
         # view_img = check_imshow()
         cudnn.benchmark = True  # set True to speed up constant image size inference
-        dataset = LoadCamera(source, img_size=imgsz, stride=stride)
+        dataset = LoadCamera(device, half, source, img_size=imgsz, stride=stride, model_choices = opt.model_choices, fps = int(opt.fps))
         process_video = ProcessVideos()
 
         # Get names and colors
-        names = model.module.names if hasattr(model, "module") else model.names
-        # colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
-        colors = [[158,66,3],[221,47,113],[86,104,193]] # 新聞記者的顏色
+        if opt.model_choices == 'yolo':
+            names = model.module.names if hasattr(model, "module") else model.names
+            # colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
+            colors = [[158,66,3],[221,47,113],[86,104,193]] # 新聞記者的顏色
 
         # Run inference
-        if device.type != "cpu":
-            model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
-        old_img_w = old_img_h = imgsz
-        old_img_b = 1
+        if opt.model_choices == 'yolo':
+            if device.type != "cpu":
+                model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
+            old_img_w = old_img_h = imgsz
+            old_img_b = 1
 
         if view_img:
             cv2.namedWindow('Realtime Trajectory', cv2.WINDOW_NORMAL)
@@ -87,32 +134,31 @@ class YoloV7:
         for path, img, im0s, vid_cap, trajectory in dataset:
             t0 = time_synchronized()
 
-            img = torch.from_numpy(img).to(device)
-            img = img.half() if half else img.float()  # uint8 to fp16/32
-            img /= 255.0  # 0 - 255 to 0.0 - 1.0
-            if img.ndimension() == 3:
-                img = img.unsqueeze(0)
-
             # Warmup
-            if device.type != "cpu" and (
-                old_img_b != img.shape[0] or old_img_h != img.shape[2] or old_img_w != img.shape[3]
-            ):
-                old_img_b = img.shape[0]
-                old_img_h = img.shape[2]
-                old_img_w = img.shape[3]
-                for i in range(3):
-                    model(img, augment=opt.augment)[0]
+            if opt.model_choices == 'yolo':
+                if device.type != "cpu" and (
+                    old_img_b != img.shape[0] or old_img_h != img.shape[2] or old_img_w != img.shape[3]
+                ):
+                    old_img_b = img.shape[0]
+                    old_img_h = img.shape[2]
+                    old_img_w = img.shape[3]
+                    for i in range(3):
+                        model(img, augment=opt.augment)[0]
 
             # Inference
             t1 = time_synchronized()
             with torch.no_grad():  # Calculating gradients would cause a GPU memory leak
-                pred = model(img, augment=opt.augment)[0]
+                if opt.model_choices == 'yolo':
+                    pred = model(img, augment=opt.augment)[0]
+                elif opt.model_choices == 'tracknet':
+                    pred = model.predict(img, batch_size=1)
             t2 = time_synchronized()
 
             # Apply NMS
-            pred = non_max_suppression(
-                pred, opt.conf_thres, opt.iou_thres, classes=opt.classes, agnostic=opt.agnostic_nms
-            )
+            if opt.model_choices == 'yolo':
+                pred = non_max_suppression(
+                    pred, opt.conf_thres, opt.iou_thres, classes=opt.classes, agnostic=opt.agnostic_nms
+                )
             t3 = time_synchronized()
 
             # Apply Classifier
@@ -130,46 +176,51 @@ class YoloV7:
                 most_confidence_ball_xyxy = None
                 most_confidence_balls = []
 
-                if len(det):
-                    # Rescale boxes from img_size to im0 size
-                    det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
+                if opt.model_choices == 'yolo':
+                    if len(det):
+                        # Rescale boxes from img_size to im0 size
+                        det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
 
-                    # Print results
-                    for c in det[:, -1].unique():
-                        n = (det[:, -1] == c).sum()  # detections per class
-                        s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
+                        # Print results
+                        for c in det[:, -1].unique():
+                            n = (det[:, -1] == c).sum()  # detections per class
+                            s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
 
-                    for *xyxy, conf, cls in reversed(det):
-                        if int(cls) != 0:
-                            continue
+                        for *xyxy, conf, cls in reversed(det):
+                            if int(cls) != 0:
+                                continue
 
-                        # 判斷boundaries
-                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        if cls == 0: # ball boundaries
-                            if opt.ball_top_boundary != "":
-                                numerator, denominator = map(int, opt.ball_top_boundary.split('/'))
-                                if xywh[1] < (numerator / denominator): # y軸在界線之上
-                                    continue
-                            if opt.ball_botton_boundary != "":
-                                numerator, denominator = map(int, opt.ball_botton_boundary.split('/'))
-                                if xywh[1] > (numerator / denominator): # y軸在界線之下
-                                    continue
+                            # 判斷boundaries
+                            xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                            if cls == 0: # ball boundaries
+                                if opt.ball_top_boundary != "":
+                                    numerator, denominator = map(int, opt.ball_top_boundary.split('/'))
+                                    if xywh[1] < (numerator / denominator): # y軸在界線之上
+                                        continue
+                                if opt.ball_botton_boundary != "":
+                                    numerator, denominator = map(int, opt.ball_botton_boundary.split('/'))
+                                    if xywh[1] > (numerator / denominator): # y軸在界線之下
+                                        continue
 
-                        if conf > most_confidence:
-                            most_confidence = conf
-                            most_confidence_ball_xyxy = xyxy
-                            most_confidence_balls.append([int(cls.item()), *xywh])
+                            if conf > most_confidence:
+                                most_confidence = conf
+                                most_confidence_ball_xyxy = xyxy
+                                most_confidence_balls.append([int(cls.item()), *xywh])
 
-                    # 指畫出信心最高的那一顆球
-                    if most_confidence != -1 and most_confidence_ball_xyxy != None:  # Add bbox to image
-                        label = f"{names[int(0)]} {most_confidence:.2f}"
-                        plot_one_box(most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=1)
+                        # 指畫出信心最高的那一顆球
+                        if most_confidence != -1 and most_confidence_ball_xyxy != None:  # Add bbox to image
+                            label = f"{names[int(0)]} {most_confidence:.2f}"
+                            plot_one_box(most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=1)
 
-                    # 取得球的位置
-                    if most_confidence_balls:
-                        if trajectory:
-                            trajectory.Read_Yolo_Label_One_Frame(balls=most_confidence_balls)
+                        # 取得球的位置
+                        if most_confidence_balls:
+                            if trajectory:
+                                trajectory.Read_Yolo_Label_One_Frame(balls=most_confidence_balls)
+
+                elif opt.model_choices == 'tracknet':
+                    x_c_pred, y_c_pred = self.TrackNet_Predict_Ball_Center(ratio, pred)
+                    trajectory.Read_Yolo_Label_One_Frame(x_c_pred = x_c_pred, y_c_pred = y_c_pred)
 
                 # 畫出軌跡
                 if trajectory:
@@ -218,6 +269,9 @@ if __name__ == "__main__":
     parser.add_argument("--no-trace", action="store_true", help="don`t trace model")
     parser.add_argument("--ball-top-boundary", default="", help="ball boundary")
     parser.add_argument("--ball-botton-boundary", default="", help="ball boundary")
+    parser.add_argument("--model-choices", default="yolo", help="yolo or tracknet")
+    parser.add_argument("--tracknet-weights", default="../12_in_12_out_pytorch/weight/model_12_42/TN12model_best_acc", help="tracknet weights")
+    parser.add_argument("--fps", default="60", help="fps")
     opt = parser.parse_args()
     print(opt)
     # check_requirements(exclude=('pycocotools', 'thop'))

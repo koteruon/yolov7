@@ -271,18 +271,51 @@ class LoadCamera:  # for inference
         self.trajectory.Set_Frame_Info(frame_height, frame_width, framerate)
         self.trajectory.Mark_Perspective_Distortion_Point(img0, frame_width, frame_height)
 
-    def __init__(self, device='/dev/vidoe0' ,img_size=640, stride=32):
+    def __init__(self, device, half, source='/dev/vidoe0', img_size=640, stride=32, model_choices=None, fps=60):
+        self.device = device
+        self.half = half
+        self.source = source
         self.img_size = img_size
         self.stride = stride
         self.mode = 'video'
-        self.cap = cv2.VideoCapture(device)  # video capture object
+        self.cap = cv2.VideoCapture(source)  # video capture object
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)  # set buffer size
+        self.cap.set(cv2.CAP_PROP_FPS, fps)
         ret_val, img0 = self.cap.read()
         self.trajectory_init(img0) # 落點
+        self.model_choices = model_choices # yolo or tracknet
+        self.tracknet_image_list = None
 
     def __iter__(self):
         self.count = -1
+        if self.model_choices == 'tracknet':
+            for _ in range(12):
+                ret_val, img0 = self.cap.read()
+                img = cv2.cvtColor(img0, cv2.COLOR_BGR2GRAY)
+                img = self.normalization(img)
+                if self.tracknet_image_list is None:
+                    self.tracknet_image_list = img
+                else:
+                    self.tracknet_image_list = np.concatenate((self.tracknet_image_list, img))
         return self
+
+    def normalization(self, img):
+        if self.model_choices == 'yolo':
+            img = torch.from_numpy(img).to(self.device)
+            img = img.half() if self.half else img.float()  # uint8 to fp16/32
+            img /= 255.0  # 0 - 255 to 0.0 - 1.0
+            if img.ndimension() == 3:
+                img = img.unsqueeze(0)
+            return img
+        elif self.model_choices == 'tracknet':
+            img = cv2.resize(img, (self.img_size[1], self.img_size[0]), interpolation=cv2.INTER_CUBIC)
+            img = img.reshape(self.img_size)
+            img = np.expand_dims(img, axis=0)
+            img = img.astype("float32")
+            img /= 255
+            return img
+        else:
+            return
 
     def __next__(self):
         self.count += 1
@@ -326,16 +359,25 @@ class LoadCamera:  # for inference
                 self.trajectory_init(img0) # 落點
 
         # Print
-        assert ret_val, f'Camera Error {self.device}'
+        assert ret_val, f'Camera Error {self.source}'
         img_path = 'webcam.jpg'
         print(f'webcam {self.count}: ', end='')
 
-        # Padded resize
-        img = letterbox(img0, self.img_size, stride=self.stride)[0]
 
-        # Convert
-        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
-        img = np.ascontiguousarray(img)
+        if self.model_choices == 'yolo':
+            # Padded resize
+            img = letterbox(img0, self.img_size, stride=self.stride)[0]
+            # Convert
+            img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+            img = np.ascontiguousarray(img)
+            img = self.normalization(img)
+        elif self.model_choices == 'tracknet':
+            img = cv2.cvtColor(img0, cv2.COLOR_BGR2GRAY)
+            img = self.normalization(img)
+            self.tracknet_image_list = self.tracknet_image_list[1:, :, :]
+            self.tracknet_image_list = np.concatenate((self.tracknet_image_list, img))
+            img = self.tracknet_image_list
+            img = np.expand_dims(img, axis=0)
 
         return img_path, img, img0, self.cap, self.trajectory
 
