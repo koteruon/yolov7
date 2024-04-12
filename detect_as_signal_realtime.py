@@ -68,7 +68,7 @@ class YoloV7:
                 new_width = int(round(new_height * width / height / 2) * 2)
         return new_width, new_height
 
-    def detect(self):
+    def detect(self, only_ball=False):
         source, weights, view_img, save_txt, imgsz, trace = (
             opt.source,
             opt.weights,
@@ -174,6 +174,7 @@ class YoloV7:
                 # most confidence
                 most_confidence = -1
                 most_confidence_ball_xyxy = None
+                most_confidence_ball_xywh = None
                 most_confidence_balls = []
 
                 if opt.model_choices == 'yolo':
@@ -186,10 +187,11 @@ class YoloV7:
                             n = (det[:, -1] == c).sum()  # detections per class
                             s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
-
+                        lines = []
                         for *xyxy, conf, cls in reversed(det):
-                            if int(cls) != 0:
-                                continue
+                            if only_ball:
+                                if int(cls) != 0:
+                                    continue
 
                             # 判斷boundaries
                             xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
@@ -202,14 +204,42 @@ class YoloV7:
                                     numerator, denominator = map(int, opt.ball_botton_boundary.split('/'))
                                     if xywh[1] > (numerator / denominator): # y軸在界線之下
                                         continue
+                            if cls  == 1: # person boundaries
+                                if opt.person_left_boundary  != "" and opt.person_right_boundary != "":
+                                    left_numerator, left_denominator = map(int, opt.person_left_boundary.split('/'))
+                                    right_numerator, right_denominator = map(int, opt.person_right_boundary.split('/'))
+                                    if xywh[0] > (left_numerator / left_denominator) and xywh[0] < (right_numerator / right_denominator): # x軸在正中間的
+                                        continue
+                                if opt.person_top_boundary != "":
+                                    numerator, denominator = map(int, opt.person_top_boundary.split('/'))
+                                    if xywh[1] < (numerator / denominator): # y軸在界線之上
+                                        continue
+                                if opt.person_botton_boundary != "":
+                                    numerator, denominator = map(int, opt.person_botton_boundary.split('/'))
+                                    if xywh[1] > (numerator / denominator): # y軸在界線之下
+                                        continue
+                            if cls == 2: # table boundaries
+                                if opt.table_top_boundary != "":
+                                    numerator, denominator = map(int, opt.table_top_boundary.split('/'))
+                                    if xywh[1] < (numerator / denominator): # y軸在界線之上
+                                        continue
+                                if opt.table_botton_boundary != "":
+                                    numerator, denominator = map(int, opt.table_botton_boundary.split('/'))
+                                    if xywh[1] > (numerator / denominator): # y軸在界線之下
+                                        continue
 
-                            if conf > most_confidence:
-                                most_confidence = conf
-                                most_confidence_ball_xyxy = xyxy
-                                most_confidence_balls.append([int(cls.item()), *xywh])
+                            if int(cls) == 0:
+                                if conf > most_confidence:
+                                    most_confidence = conf
+                                    most_confidence_ball_xyxy = xyxy
+                                    most_confidence_ball_xywh = xywh
+                                    most_confidence_balls.append([int(cls.item()), *xywh])
+                            else:
+                                lines.append((int(cls), *xywh, conf.item()) if opt.save_conf else (int(cls), *xywh))  # label format
 
                         # 指畫出信心最高的那一顆球
-                        if most_confidence != -1 and most_confidence_ball_xyxy != None:  # Add bbox to image
+                        if most_confidence != -1 and most_confidence_ball_xyxy != None and most_confidence_ball_xywh != None:  # Add bbox to image
+                            lines.append((int(0), *most_confidence_ball_xywh, most_confidence.item()) if opt.save_conf else (int(0), *most_confidence_ball_xywh)) # label format
                             label = f"{names[int(0)]} {most_confidence:.2f}"
                             plot_one_box(most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=1)
 
@@ -267,8 +297,15 @@ if __name__ == "__main__":
     parser.add_argument("--name", default="exp", help="save results to project/name")
     parser.add_argument("--exist-ok", action="store_true", help="existing project/name ok, do not increment")
     parser.add_argument("--no-trace", action="store_true", help="don`t trace model")
+    parser.add_argument("--onlyball", action="store_true", help="plot only ball")
     parser.add_argument("--ball-top-boundary", default="", help="ball boundary")
     parser.add_argument("--ball-botton-boundary", default="", help="ball boundary")
+    parser.add_argument("--person-left-boundary", default="", help="person boundary")
+    parser.add_argument("--person-right-boundary", default="", help="person boundary")
+    parser.add_argument("--person-top-boundary", default="", help="person boundary")
+    parser.add_argument("--person-botton-boundary", default="", help="person boundary")
+    parser.add_argument("--table-top-boundary", default="", help="table boundary")
+    parser.add_argument("--table-botton-boundary", default="", help="table boundary")
     parser.add_argument("--model-choices", default="yolo", help="yolo or tracknet")
     parser.add_argument("--tracknet-weights", default="../12_in_12_out_pytorch/weight/model_12_42/TN12model_best_acc", help="tracknet weights")
     parser.add_argument("--fps", default="60", help="fps")
@@ -280,7 +317,6 @@ if __name__ == "__main__":
         yoloV7 = YoloV7()
         if opt.update:  # update all models (to fix SourceChangeWarning)
             for opt.weights in ["yolov7.pt"]:
-                yoloV7.detect()
+                yoloV7.detect(only_ball=opt.onlyball)
                 strip_optimizer(opt.weights)
-        else:
-            yoloV7.detect()
+        else:            yoloV7.detect(only_ball=opt.onlyball)
