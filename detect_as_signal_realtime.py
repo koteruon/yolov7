@@ -84,7 +84,7 @@ class YoloV7:
         half = device.type != "cpu"  # half precision only supported on CUDA
 
         # Load model
-        if opt.model_choices == 'yolo':
+        if opt.model_choices == "yolo":
             model = attempt_load(weights, map_location=device)  # load FP32 model
             stride = int(model.stride.max())  # model stride
             imgsz = check_img_size(imgsz, s=stride)  # check img_size
@@ -92,9 +92,31 @@ class YoloV7:
                 model = TracedModel(model, device, opt.img_size)
             if half:
                 model.half()  # to FP16
-        elif opt.model_choices == 'tracknet':
+        elif opt.model_choices == "tracknet":
             sys.path.append("../12_in_12_out_pytorch")
+            import os
+
+            os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
             model = load_model(opt.tracknet_weights, custom_objects={"custom_loss": self.TrackNet_Custom_Loss})
+            stride = None
+            frame_height = 1080
+            HEIGHT = 288  # model input size
+            WIDTH = 512
+            imgsz = (HEIGHT, WIDTH)
+            ratio = frame_height / HEIGHT
+        elif opt.model_choices == "tracknet_pytorch":
+            sys.path.append("../12_in_12_out_pytorch")
+
+            from unet_models.TrackNet12_3plus_lessDim_bw_pytorch import \
+                TrackNet12_3plus_lessDim_bw_pytorch
+
+            model = TrackNet12_3plus_lessDim_bw_pytorch()
+            checkpoint = torch.load(opt.tracknet_weights, map_location=device)
+            model.load_state_dict(checkpoint)
+            # if half:
+            #     model.half()  # to FP16
+            model = model.to(device)
+            model.eval()
             stride = None
             frame_height = 1080
             HEIGHT = 288  # model input size
@@ -110,32 +132,35 @@ class YoloV7:
 
         # Set Dataloader
         # view_img = check_imshow()
+        cudnn.enabled = True  # set True to speed up constant image size inference
         cudnn.benchmark = True  # set True to speed up constant image size inference
-        dataset = LoadCamera(device, half, source, img_size=imgsz, stride=stride, model_choices = opt.model_choices, fps = int(opt.fps))
+        dataset = LoadCamera(
+            device, half, source, img_size=imgsz, stride=stride, model_choices=opt.model_choices, fps=int(opt.fps)
+        )
         process_video = ProcessVideos()
 
         # Get names and colors
-        if opt.model_choices == 'yolo':
+        if opt.model_choices == "yolo":
             names = model.module.names if hasattr(model, "module") else model.names
             # colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
-            colors = [[158,66,3],[221,47,113],[86,104,193]] # 新聞記者的顏色
+            colors = [[158, 66, 3], [221, 47, 113], [86, 104, 193]]  # 新聞記者的顏色
 
         # Run inference
-        if opt.model_choices == 'yolo':
+        if opt.model_choices == "yolo":
             if device.type != "cpu":
                 model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
             old_img_w = old_img_h = imgsz
             old_img_b = 1
 
         if view_img:
-            cv2.namedWindow('Realtime Trajectory', cv2.WINDOW_NORMAL)
+            cv2.namedWindow("Realtime Trajectory", cv2.WINDOW_NORMAL)
 
         # yolo detect
         for path, img, im0s, vid_cap, trajectory in dataset:
             t0 = time_synchronized()
 
             # Warmup
-            if opt.model_choices == 'yolo':
+            if opt.model_choices == "yolo":
                 if device.type != "cpu" and (
                     old_img_b != img.shape[0] or old_img_h != img.shape[2] or old_img_w != img.shape[3]
                 ):
@@ -148,14 +173,19 @@ class YoloV7:
             # Inference
             t1 = time_synchronized()
             with torch.no_grad():  # Calculating gradients would cause a GPU memory leak
-                if opt.model_choices == 'yolo':
+                if opt.model_choices == "yolo":
                     pred = model(img, augment=opt.augment)[0]
-                elif opt.model_choices == 'tracknet':
+                elif opt.model_choices == "tracknet":
                     pred = model.predict(img, batch_size=1)
+                elif opt.model_choices == "tracknet_pytorch":
+                    img = torch.from_numpy(img).float().to(device)
+                    pred = model(img)[0]
+                    pred = pred.cpu().detach().numpy()
+                    pred = np.expand_dims(pred, axis=0)
             t2 = time_synchronized()
 
             # Apply NMS
-            if opt.model_choices == 'yolo':
+            if opt.model_choices == "yolo":
                 pred = non_max_suppression(
                     pred, opt.conf_thres, opt.iou_thres, classes=opt.classes, agnostic=opt.agnostic_nms
                 )
@@ -177,7 +207,7 @@ class YoloV7:
                 most_confidence_ball_xywh = None
                 most_confidence_balls = []
 
-                if opt.model_choices == 'yolo':
+                if opt.model_choices == "yolo":
                     if len(det):
                         # Rescale boxes from img_size to im0 size
                         det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
@@ -195,14 +225,39 @@ class YoloV7:
 
                             # 判斷boundaries
                             xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                            if cls == 0: # ball boundaries
+                            if cls == 0:  # ball boundaries
                                 if opt.ball_top_boundary != "":
-                                    numerator, denominator = map(int, opt.ball_top_boundary.split('/'))
-                                    if xywh[1] < (numerator / denominator): # y軸在界線之上
+                                    numerator, denominator = map(int, opt.ball_top_boundary.split("/"))
+                                    if xywh[1] < (numerator / denominator):  # y軸在界線之上
                                         continue
                                 if opt.ball_botton_boundary != "":
-                                    numerator, denominator = map(int, opt.ball_botton_boundary.split('/'))
-                                    if xywh[1] > (numerator / denominator): # y軸在界線之下
+                                    numerator, denominator = map(int, opt.ball_botton_boundary.split("/"))
+                                    if xywh[1] > (numerator / denominator):  # y軸在界線之下
+                                        continue
+                            if cls == 1:  # person boundaries
+                                if opt.person_left_boundary != "" and opt.person_right_boundary != "":
+                                    left_numerator, left_denominator = map(int, opt.person_left_boundary.split("/"))
+                                    right_numerator, right_denominator = map(int, opt.person_right_boundary.split("/"))
+                                    if xywh[0] > (left_numerator / left_denominator) and xywh[0] < (
+                                        right_numerator / right_denominator
+                                    ):  # x軸在正中間的
+                                        continue
+                                if opt.person_top_boundary != "":
+                                    numerator, denominator = map(int, opt.person_top_boundary.split("/"))
+                                    if xywh[1] < (numerator / denominator):  # y軸在界線之上
+                                        continue
+                                if opt.person_botton_boundary != "":
+                                    numerator, denominator = map(int, opt.person_botton_boundary.split("/"))
+                                    if xywh[1] > (numerator / denominator):  # y軸在界線之下
+                                        continue
+                            if cls == 2:  # table boundaries
+                                if opt.table_top_boundary != "":
+                                    numerator, denominator = map(int, opt.table_top_boundary.split("/"))
+                                    if xywh[1] < (numerator / denominator):  # y軸在界線之上
+                                        continue
+                                if opt.table_botton_boundary != "":
+                                    numerator, denominator = map(int, opt.table_botton_boundary.split("/"))
+                                    if xywh[1] > (numerator / denominator):  # y軸在界線之下
                                         continue
                             if cls  == 1: # person boundaries
                                 if opt.person_left_boundary  != "" and opt.person_right_boundary != "":
@@ -241,16 +296,18 @@ class YoloV7:
                         if most_confidence != -1 and most_confidence_ball_xyxy != None and most_confidence_ball_xywh != None:  # Add bbox to image
                             lines.append((int(0), *most_confidence_ball_xywh, most_confidence.item()) if opt.save_conf else (int(0), *most_confidence_ball_xywh)) # label format
                             label = f"{names[int(0)]} {most_confidence:.2f}"
-                            plot_one_box(most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=1)
+                            plot_one_box(
+                                most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=1
+                            )
 
                         # 取得球的位置
                         if most_confidence_balls:
                             if trajectory:
                                 trajectory.Read_Yolo_Label_One_Frame(balls=most_confidence_balls)
 
-                elif opt.model_choices == 'tracknet':
+                elif opt.model_choices == "tracknet" or opt.model_choices == "tracknet_pytorch":
                     x_c_pred, y_c_pred = self.TrackNet_Predict_Ball_Center(ratio, pred)
-                    trajectory.Read_Yolo_Label_One_Frame(x_c_pred = x_c_pred, y_c_pred = y_c_pred)
+                    trajectory.Read_Yolo_Label_One_Frame(x_c_pred=x_c_pred, y_c_pred=y_c_pred)
 
                 # 畫出軌跡
                 if trajectory:
@@ -260,18 +317,17 @@ class YoloV7:
                     image_CV = trajectory.Draw_On_Image(image_CV, ball_direction)
                     trajectory.Next_Count()
                     if view_img:
-                        cv2.imshow('Realtime Trajectory', image_CV)
+                        cv2.imshow("Realtime Trajectory", image_CV)
                 else:
                     if view_img:
-                        cv2.imshow('Realtime Trajectory', im0)
+                        cv2.imshow("Realtime Trajectory", im0)
 
                 t4 = time_synchronized()
 
                 # Print time (inference + NMS)
-                print(f"{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS, ({(1E3 * (t4 - t0)):.1f}ms) Total time, ({1.0 / (t4 - t0):.1f}) FPS")
-
-
-
+                print(
+                    f"{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS, ({(1E3 * (t4 - t0)):.1f}ms) Total time, ({1.0 / (t4 - t0):.1f}) FPS"
+                )
 
 
 if __name__ == "__main__":
@@ -307,7 +363,11 @@ if __name__ == "__main__":
     parser.add_argument("--table-top-boundary", default="", help="table boundary")
     parser.add_argument("--table-botton-boundary", default="", help="table boundary")
     parser.add_argument("--model-choices", default="yolo", help="yolo or tracknet")
-    parser.add_argument("--tracknet-weights", default="../12_in_12_out_pytorch/weight/model_12_42/TN12model_best_acc", help="tracknet weights")
+    parser.add_argument(
+        "--tracknet-weights",
+        default="../12_in_12_out_pytorch/weight/model_12_42/TN12model_best_acc",
+        help="tracknet weights",
+    )
     parser.add_argument("--fps", default="60", help="fps")
     opt = parser.parse_args()
     print(opt)
@@ -319,4 +379,5 @@ if __name__ == "__main__":
             for opt.weights in ["yolov7.pt"]:
                 yoloV7.detect(only_ball=opt.onlyball)
                 strip_optimizer(opt.weights)
-        else:            yoloV7.detect(only_ball=opt.onlyball)
+        else:
+            yoloV7.detect(only_ball=opt.onlyball)
