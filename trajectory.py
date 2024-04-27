@@ -532,18 +532,18 @@ class Trajectory():
         # 點選透視變形位置, 順序為:左上,左下,右下,右上
         PT_data = {"img": image.copy(), "point_x": [], "point_y": []}
         # TODO: 測試用
-        PT_data["point_x"] = [488,432,1383,1319]
-        PT_data["point_y"] = [675,789,796,679]
+        # PT_data["point_x"] = [488,432,1383,1319]
+        # PT_data["point_y"] = [675,789,796,679]
         # TODO 測試用
-        # cv2.namedWindow("PIC2 (press Q to quit)", 0)
-        # cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
-        # cv2.setMouseCallback("PIC2 (press Q to quit)", self.Draw_Circle, PT_data)
-        # while True:
-        #     cv2.imshow("PIC2 (press Q to quit)", PT_data["img"])
-        #     if cv2.waitKey(2) == ord("q"):
-        #         print(PT_data)
-        #         cv2.destroyWindow("PIC2 (press Q to quit)")
-        #         break
+        cv2.namedWindow("PIC2 (press Q to quit)", 0)
+        cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
+        cv2.setMouseCallback("PIC2 (press Q to quit)", self.Draw_Circle, PT_data)
+        while True:
+            cv2.imshow("PIC2 (press Q to quit)", PT_data["img"])
+            if cv2.waitKey(2) == ord("q"):
+                print(PT_data)
+                cv2.destroyWindow("PIC2 (press Q to quit)")
+                break
 
         # PerspectiveTransform
         upper_left = [PT_data["point_x"][0], PT_data["point_y"][0]]
