@@ -322,7 +322,7 @@ class LoadCamera:  # for inference
 
     def __iter__(self):
         self.count = -1
-        if self.model_choices == "tracknet" or self.model_choices == "tracknetonnx":
+        if self.model_choices == "tracknet" or self.model_choices == "tracknet_pytorch":
             for _ in range(12):
                 ret_val, img0 = self.cap.read()
                 img = cv2.cvtColor(img0, cv2.COLOR_BGR2GRAY)
@@ -341,7 +341,7 @@ class LoadCamera:  # for inference
             if img.ndimension() == 3:
                 img = img.unsqueeze(0)
             return img
-        elif self.model_choices == "tracknet" or self.model_choices == "tracknetonnx":
+        elif self.model_choices == "tracknet" or self.model_choices == "tracknet_pytorch":
             img = cv2.resize(img, (self.img_size[1], self.img_size[0]), interpolation=cv2.INTER_CUBIC)
             img = img.reshape(self.img_size)
             img = np.expand_dims(img, axis=0)
@@ -404,7 +404,7 @@ class LoadCamera:  # for inference
             img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
             img = np.ascontiguousarray(img)
             img = self.normalization(img)
-        elif self.model_choices == "tracknet" or self.model_choices == "tracknetonnx":
+        elif self.model_choices == "tracknet" or self.model_choices == "tracknet_pytorch":
             img = cv2.cvtColor(img0, cv2.COLOR_BGR2GRAY)
             img = self.normalization(img)
             self.tracknet_image_list = self.tracknet_image_list[1:, :, :]
