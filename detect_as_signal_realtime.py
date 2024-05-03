@@ -157,8 +157,6 @@ class YoloV7:
 
         # yolo detect
         for path, img, im0s, vid_cap, trajectory in dataset:
-            t0 = time_synchronized()
-
             # Warmup
             if opt.model_choices == "yolo":
                 if device.type != "cpu" and (
@@ -322,12 +320,12 @@ class YoloV7:
                     if view_img:
                         cv2.imshow("Realtime Trajectory", im0)
 
-                t4 = time_synchronized()
-
                 # Print time (inference + NMS)
                 print(
-                    f"{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS, ({(1E3 * (t4 - t0)):.1f}ms) Total time, ({1.0 / (t4 - t0):.1f}) FPS"
+                    f"{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS, ({(1E3 * (time_synchronized() - t4)):.1f}ms) Total time, ({1.0 / (time_synchronized() - t4):.1f}) FPS"
                 )
+
+                t4 = time_synchronized()
 
 
 if __name__ == "__main__":
