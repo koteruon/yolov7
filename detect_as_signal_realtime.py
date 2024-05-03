@@ -193,6 +193,7 @@ class YoloV7:
             if classify:
                 pred = apply_classifier(pred, modelc, img, im0s)
 
+            t4 = time_synchronized()
             # Process detections
             for i, det in enumerate(pred):  # detections per image
                 p, s, im0, frame = "Realtime", "", im0s.copy(), dataset.count
