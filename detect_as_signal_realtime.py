@@ -155,6 +155,8 @@ class YoloV7:
         if view_img:
             cv2.namedWindow("Realtime Trajectory", cv2.WINDOW_NORMAL)
 
+
+        t4 = time_synchronized()
         # yolo detect
         for path, img, im0s, vid_cap, trajectory in dataset:
             # Warmup
@@ -193,7 +195,6 @@ class YoloV7:
             if classify:
                 pred = apply_classifier(pred, modelc, img, im0s)
 
-            t4 = time_synchronized()
             # Process detections
             for i, det in enumerate(pred):  # detections per image
                 p, s, im0, frame = "Realtime", "", im0s.copy(), dataset.count
