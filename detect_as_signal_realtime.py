@@ -1,6 +1,9 @@
 import argparse
+import multiprocessing
+import queue
 import re
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -20,6 +23,42 @@ from utils.general import (apply_classifier, check_img_size, check_imshow,
 from utils.plots import plot_one_box
 from utils.torch_utils import (TracedModel, load_classifier, select_device,
                                time_synchronized)
+
+
+def first_frame_loading(source, fps, shared_queue):
+    cap = cv2.VideoCapture(source)  # video capture object
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)  # set buffer size
+    cap.set(cv2.CAP_PROP_FPS, fps)
+    img0 = None
+    while img0 is None:
+        ret_val, img0 = cap.read()
+        assert ret_val, f"Camera Error {source}"
+        try:
+            shared_queue.put(img0, block=True, timeout=2)
+        except queue.Full:
+            print("Queue is full, producer is waiting...")
+            time.sleep(2)
+    cap.release()
+
+
+def frame_loading(source, fps, shared_queue):
+    cap = cv2.VideoCapture(source)  # video capture object
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)  # set buffer size
+    cap.set(cv2.CAP_PROP_FPS, fps)
+    avg_time = 0.0
+    t = time.time()
+    while True:
+        ret_val, img0 = cap.read()
+        assert ret_val, f"Camera Error {source}"
+        try:
+            shared_queue.put(img0, block=True, timeout=(1 + 0.1) / fps)
+        except queue.Full:
+            print("Queue is full, producer is waiting...")
+            time.sleep((1 + 0.5) / fps)
+        avg_time = avg_time * 0.5 + (time.time() - t) * 0.5
+        t = time.time()
+        print(f"{shared_queue.qsize()} size")
+        print(f"{1.0 / (avg_time):.1f} FPS")
 
 
 class YoloV7:
@@ -134,9 +173,7 @@ class YoloV7:
         # view_img = check_imshow()
         cudnn.enabled = True  # set True to speed up constant image size inference
         cudnn.benchmark = True  # set True to speed up constant image size inference
-        dataset = LoadCamera(
-            device, half, source, img_size=imgsz, stride=stride, model_choices=opt.model_choices, fps=int(opt.fps)
-        )
+
         process_video = ProcessVideos()
 
         # Get names and colors
@@ -155,10 +192,24 @@ class YoloV7:
         if view_img:
             cv2.namedWindow("Realtime Trajectory", cv2.WINDOW_NORMAL)
 
+        # shared object
+        MAX_QUEUE_SIZE = int(opt.fps) * 20
+        shared_queue = queue.Queue(MAX_QUEUE_SIZE)
+
+        first_frame_loading(source, int(opt.fps), shared_queue)
+
+        # dataset
+        dataset = LoadCamera(
+            device, half, source, img_size=imgsz, stride=stride, model_choices=opt.model_choices, fps=int(opt.fps), shared_queue=shared_queue
+        )
+
+        # multi-thread
+        frame_loading_thread = threading.Thread(target=frame_loading, args=(source, int(opt.fps), shared_queue))
+        frame_loading_thread.start()
 
         t4 = time_synchronized()
         # yolo detect
-        for path, img, im0s, vid_cap, trajectory in dataset:
+        for img, im0s, trajectory in dataset:
             # Warmup
             if opt.model_choices == "yolo":
                 if device.type != "cpu" and (
