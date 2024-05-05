@@ -22,14 +22,23 @@ import torch.nn.functional as F
 from PIL import ExifTags, Image
 from torch.utils.data import Dataset
 from torchvision.ops import ps_roi_align, ps_roi_pool, roi_align, roi_pool
+
 # from pycocotools import mask as maskUtils
 from torchvision.utils import save_image
 from tqdm import tqdm
 
 from trajectory import Trajectory
-from utils.general import (check_requirements, clean_str, resample_segments,
-                           segment2box, segments2boxes, xyn2xy, xywh2xyxy,
-                           xywhn2xyxy, xyxy2xywh)
+from utils.general import (
+    check_requirements,
+    clean_str,
+    resample_segments,
+    segment2box,
+    segments2boxes,
+    xyn2xy,
+    xywh2xyxy,
+    xywhn2xyxy,
+    xyxy2xywh,
+)
 from utils.torch_utils import torch_distributed_zero_first
 
 # Parameters
@@ -324,10 +333,9 @@ class LoadCamera:  # for inference
         while img0 is None:
             try:
                 img0 = self.shared_queue.get(block=True, timeout=2)
-                print(f"{self.shared_queue.qsize()} size")
             except queue.Empty:
                 img0 = None
-                time.sleep((1 - 0.5) / self.fps)
+                time.sleep((1 + 0.1) / self.fps)
         return img0
 
     def __iter__(self):
