@@ -5,7 +5,6 @@ import logging
 import math
 import os
 import pickle
-import queue
 import random
 import shutil
 import time
@@ -302,47 +301,30 @@ class LoadCamera:  # for inference
     def trajectory_init(self, img0):
         self.trajectory = Trajectory(real_time=True)
         frame_height, frame_width, frame_channel = img0.shape
-        framerate = self.fps
+        framerate = self.cap.get(cv2.CAP_PROP_FPS)
         self.trajectory.Set_Frame_Info(frame_height, frame_width, framerate)
         self.trajectory.Mark_Perspective_Distortion_Point(img0, frame_width, frame_height)
 
-    def __init__(
-        self, device, half, source="/dev/vidoe0", img_size=640, stride=32, model_choices=None, fps=60, shared_queue=None
-    ):
+    def __init__(self, device, half, source="/dev/vidoe0", img_size=640, stride=32, model_choices=None, fps=60):
         self.device = device
         self.half = half
         self.source = source
         self.img_size = img_size
         self.stride = stride
         self.mode = "video"
-        self.fps = fps
-        img0 = None
-        while img0 is None:
-            try:
-                img0 = shared_queue.get(block=True, timeout=2)
-            except queue.Empty:
-                img0 = None
-                time.sleep((1 + 0.1) / fps)
+        self.cap = cv2.VideoCapture(source)  # video capture object
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)  # set buffer size
+        self.cap.set(cv2.CAP_PROP_FPS, fps)
+        ret_val, img0 = self.cap.read()
         self.trajectory_init(img0)  # 落點
         self.model_choices = model_choices  # yolo or tracknet
         self.tracknet_image_list = None
-        self.shared_queue = shared_queue
-
-    def get_next_frame(self):
-        img0 = None
-        while img0 is None:
-            try:
-                img0 = self.shared_queue.get(block=True, timeout=2)
-            except queue.Empty:
-                img0 = None
-                time.sleep((1 + 0.1) / self.fps)
-        return img0
 
     def __iter__(self):
         self.count = -1
         if self.model_choices == "tracknet" or self.model_choices == "tracknet_pytorch":
             for _ in range(12):
-                img0 = self.get_next_frame()
+                ret_val, img0 = self.cap.read()
                 img = cv2.cvtColor(img0, cv2.COLOR_BGR2GRAY)
                 img = self.normalization(img)
                 if self.tracknet_image_list is None:
@@ -373,7 +355,7 @@ class LoadCamera:  # for inference
         self.count += 1
 
         # Read frame
-        img0 = self.get_next_frame()
+        ret_val, img0 = self.cap.read()
 
         if cv2.waitKey(1) == ord("q"):  # q to quit
             self.trajectory.Write_Bounce_Location()
@@ -387,6 +369,7 @@ class LoadCamera:  # for inference
             # For saving speedHist
             self.trajectory.Draw_SpeedHist()
 
+            self.cap.release()
             cv2.destroyAllWindows()
             raise StopIteration
 
@@ -410,6 +393,8 @@ class LoadCamera:  # for inference
                 self.trajectory_init(img0)  # 落點
 
         # Print
+        assert ret_val, f"Camera Error {self.source}"
+        img_path = "webcam.jpg"
         print(f"webcam {self.count}: ", end="")
 
         if self.model_choices == "yolo":
@@ -427,7 +412,7 @@ class LoadCamera:  # for inference
             img = self.tracknet_image_list
             img = np.expand_dims(img, axis=0)
 
-        return img, img0, self.trajectory
+        return img_path, img, img0, self.cap, self.trajectory
 
     def __len__(self):
         return 0
