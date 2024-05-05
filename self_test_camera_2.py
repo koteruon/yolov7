@@ -7,55 +7,6 @@ import numpy as np
 
 # ffmpeg -re -stream_loop -1 -i /home/chaoen/yoloNhit_calvin/yolov7/inference/videos_long/0010.mp4 -map 0:v -f v4l2 /dev/video0
 
-# FFmpeg record=================
-def videoFFmpeg(self,fileOut,time_,framerateVideo):
-
-
-    video_ = ffmpeg.input('video=screen-capture-recorder',
-                          thread_queue_size=2048,
-                          rtbufsize='2048M',
-                          pixel_format='bgr24',
-                          framerate=framerateVideo,
-                          f='dshow'
-                          )
-
-    audio_ = ffmpeg.input('audio=Микрофон (2- Xonar U7 MKII)',
-                          thread_queue_size=2048,
-                          rtbufsize='2048M',
-                          channel_layout='stereo',
-                          f='dshow'
-                          )
-    v2 = ffmpeg.filter(video_, 'scale',in_range='full',out_range='full',eval='init',interl='false',flags='bitexact+accurate_rnd+full_chroma_int').filter('fps', fps=framerateVideo).filter('pp', 'fa').filter('crop', 1920,1040,0,0)
-
-    if time_==0:
-        out = ffmpeg.output(v2, audio_, fileOut, acodec='copy', vcodec="libx264", preset='ultrafast',
-                            tune='film', crf=17, r=framerateVideo, force_key_frames='expr:gte(t,n_forced*1)',
-                            sc_threshold=0, pix_fmt='yuv420p', max_muxing_queue_size=2048,
-                            start_at_zero=None)
-    else:
-        out = ffmpeg.output(v2, audio_, fileOut, acodec='copy', vcodec="libx264", preset='ultrafast',
-                            tune='film', crf=17, r=framerateVideo, force_key_frames='expr:gte(t,n_forced*1)',
-                            sc_threshold=0, pix_fmt='yuv420p', max_muxing_queue_size=2048,
-                            start_at_zero=None, t=time_)
-
-
-    out = out.global_args('-hide_banner')
-    out = out.global_args('-hwaccel_device', 'auto')
-    out = out.global_args('-hwaccel', 'auto')
-    # out = out.global_args('-report')
-    out = out.overwrite_output()
-
-    self.process = out.run_async(pipe_stdin=True)
-
-# Quit  FFmpeg ==================
-def QuitFFmpeg(self):
-    # print(1)
-    self.process.communicate(str.encode("q"))
-
-    time.sleep(3)
-    self.process.terminate()
-    return 'Exit'
-
 
 in_filename = "/home/siplab4/chaoen/yoloNhit_calvin/yolov7/inference/videos_long/6.mp4"
 
