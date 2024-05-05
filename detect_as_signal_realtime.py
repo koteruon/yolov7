@@ -45,21 +45,19 @@ def frame_loading(source, fps, shared_queue):
     cap = cv2.VideoCapture(source)  # video capture object
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)  # set buffer size
     cap.set(cv2.CAP_PROP_FPS, fps)
-    avg_time = 0.0
+    delay = 1/fps
     t = time.time()
     while True:
+        if time.time() - t < delay:
+            continue
+        t = time.time()
         ret_val, img0 = cap.read()
         assert ret_val, f"Camera Error {source}"
         try:
-            shared_queue.put(img0, block=True, timeout=(1 + 0.1) / fps)
+            shared_queue.put(img0, block=True, timeout=2)
         except queue.Full:
             print("Queue is full, producer is waiting...")
             time.sleep((1 + 0.5) / fps)
-        avg_time = avg_time * 0.5 + (time.time() - t) * 0.5
-        t = time.time()
-        print(f"{shared_queue.qsize()} size")
-        print(f"{1.0 / (avg_time):.1f} FPS")
-
 
 class YoloV7:
     def TrackNet_Custom_Loss(self, y_true, y_pred):
@@ -369,9 +367,11 @@ class YoloV7:
                     trajectory.Next_Count()
                     if view_img:
                         cv2.imshow("Realtime Trajectory", image_CV)
+                        cv2.waitKey(10)
                 else:
                     if view_img:
                         cv2.imshow("Realtime Trajectory", im0)
+                        cv2.waitKey(10)
 
                 # Print time (inference + NMS)
                 print(
