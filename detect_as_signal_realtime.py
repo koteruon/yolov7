@@ -153,7 +153,7 @@ class YoloV7:
             old_img_b = 1
 
         if view_img:
-            cv2.namedWindow("Realtime Trajectory", cv2.WINDOW_NORMAL)
+            cv2.namedWindow("Realtime Trajectory")
 
 
         t4 = time_synchronized()
