@@ -292,30 +292,63 @@ class LoadCamera:  # for inference
     def trajectory_init(self, img0):
         self.trajectory = Trajectory(real_time=True)
         frame_height, frame_width, frame_channel = img0.shape
-        framerate = self.cap.get(cv2.CAP_PROP_FPS)
-        self.trajectory.Set_Frame_Info(frame_height, frame_width, framerate)
+        self.trajectory.Set_Frame_Info(frame_height, frame_width, self.fps)
         self.trajectory.Mark_Perspective_Distortion_Point(img0, frame_width, frame_height)
 
-    def __init__(self, device, half, source="/dev/vidoe0", img_size=640, stride=32, model_choices=None, fps=60):
+    def __init__(
+        self,
+        device,
+        half,
+        source="/dev/video0",
+        img_size=640,
+        stride=32,
+        model_choices=None,
+        fps=60,
+        height=1920,
+        width=1080,
+    ):
         self.device = device
         self.half = half
         self.source = source
         self.img_size = img_size
         self.stride = stride
         self.mode = "video"
-        self.cap = cv2.VideoCapture(source)  # video capture object
-        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 3000)  # set buffer size
-        self.cap.set(cv2.CAP_PROP_FPS, fps)
-        ret_val, img0 = self.cap.read()
+        self.height = height
+        self.width = width
+        self.fps = fps
+        if self.source == "/dev/video0":
+            self.cap = cv2.VideoCapture(self.source)  # video capture object
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)  # set buffer size
+            self.cap.set(cv2.CAP_PROP_FPS, fps)
+            ret_val, img0 = self.cap.read()
+        else:
+            import ffmpeg
+
+            self.process = (
+                ffmpeg.input(self.source, format="decklink")
+                # .filter("fps", fps=60, round="up")
+                .output("pipe:", format="rawvideo", pix_fmt="rgb24").run_async(pipe_stdout=True)
+            )
+            in_bytes = self.process.stdout.read(self.height * self.width * 3)
+            in_frame = np.frombuffer(in_bytes, np.uint8).reshape([self.height, self.width, 3])
+            img0 = cv2.cvtColor(in_frame, cv2.COLOR_RGB2BGR)
         self.trajectory_init(img0)  # 落點
         self.model_choices = model_choices  # yolo or tracknet
         self.tracknet_image_list = None
+
+    def read_frame_from_ffmpeg(self):
+        in_bytes = self.process.stdout.read(self.height * self.width * 3)
+        in_frame = np.frombuffer(in_bytes, np.uint8).reshape([self.height, self.width, 3])
+        return cv2.cvtColor(in_frame, cv2.COLOR_RGB2BGR)
 
     def __iter__(self):
         self.count = -1
         if self.model_choices == "tracknet" or self.model_choices == "tracknet_pytorch":
             for _ in range(12):
-                ret_val, img0 = self.cap.read()
+                if self.source == "/dev/video0":
+                    ret_val, img0 = self.cap.read()
+                else:
+                    img0 = self.read_frame_from_ffmpeg()
                 img = cv2.cvtColor(img0, cv2.COLOR_BGR2GRAY)
                 img = self.normalization(img)
                 if self.tracknet_image_list is None:
@@ -346,7 +379,10 @@ class LoadCamera:  # for inference
         self.count += 1
 
         # Read frame
-        ret_val, img0 = self.cap.read()
+        if self.source == "/dev/video0":
+            ret_val, img0 = self.cap.read()
+        else:
+            img0 = self.read_frame_from_ffmpeg()
 
         if cv2.waitKey(1) == ord("q"):  # q to quit
             self.trajectory.Write_Bounce_Location()
@@ -384,8 +420,6 @@ class LoadCamera:  # for inference
                 self.trajectory_init(img0)  # 落點
 
         # Print
-        assert ret_val, f"Camera Error {self.source}"
-        img_path = "webcam.jpg"
         print(f"webcam {self.count}: ", end="")
 
         if self.model_choices == "yolo":
@@ -403,7 +437,7 @@ class LoadCamera:  # for inference
             img = self.tracknet_image_list
             img = np.expand_dims(img, axis=0)
 
-        return img_path, img, img0, self.cap, self.trajectory
+        return img, img0, self.trajectory
 
     def __len__(self):
         return 0

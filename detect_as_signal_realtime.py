@@ -99,6 +99,8 @@ class YoloV7:
                 model = TracedModel(model, device, opt.img_size)
             if half:
                 model.half()  # to FP16
+            frame_height = 1080
+            frame_width = 1920
         elif opt.model_choices == "tracknet":
             sys.path.append("../12_in_12_out_pytorch")
             import os
@@ -107,6 +109,7 @@ class YoloV7:
             model = load_model(opt.tracknet_weights, custom_objects={"custom_loss": self.TrackNet_Custom_Loss})
             stride = None
             frame_height = 1080
+            frame_width = 1920
             HEIGHT = 288  # model input size
             WIDTH = 512
             imgsz = (HEIGHT, WIDTH)
@@ -125,6 +128,7 @@ class YoloV7:
             model.eval()
             stride = None
             frame_height = 1080
+            frame_width = 1920
             HEIGHT = 288  # model input size
             WIDTH = 512
             imgsz = (HEIGHT, WIDTH)
@@ -141,7 +145,7 @@ class YoloV7:
         cudnn.enabled = True  # set True to speed up constant image size inference
         cudnn.benchmark = True  # set True to speed up constant image size inference
         dataset = LoadCamera(
-            device, half, source, img_size=imgsz, stride=stride, model_choices=opt.model_choices, fps=int(opt.fps)
+            device, half, source, img_size=imgsz, stride=stride, model_choices=opt.model_choices, fps=int(opt.fps), height=frame_height, width=frame_width,
         )
         process_video = ProcessVideos()
 
@@ -162,10 +166,10 @@ class YoloV7:
             cv2.namedWindow("Realtime Trajectory", cv2.WINDOW_NORMAL)
             cv2.setWindowProperty("Realtime Trajectory", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
-        # yolo detect
-        for path, img, im0s, vid_cap, trajectory in dataset:
-            t0 = time_synchronized()
 
+        t4 = time_synchronized()
+        # yolo detect
+        for img, im0s, trajectory in dataset:
             # Warmup
             if opt.model_choices == "yolo":
                 if device.type != "cpu" and (
@@ -341,12 +345,12 @@ class YoloV7:
                     if view_img:
                         cv2.imshow("Realtime Trajectory", im0)
 
-                t4 = time_synchronized()
-
                 # Print time (inference + NMS)
                 print(
-                    f"{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS, ({(1E3 * (t4 - t0)):.1f}ms) Total time, ({1.0 / (t4 - t0):.1f}) FPS"
+                    f"{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS, ({(1E3 * (time_synchronized() - t4)):.1f}ms) Total time, ({1.0 / (time_synchronized() - t4):.1f}) FPS"
                 )
+
+                t4 = time_synchronized()
 
 
 if __name__ == "__main__":
