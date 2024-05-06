@@ -21,14 +21,23 @@ import torch.nn.functional as F
 from PIL import ExifTags, Image
 from torch.utils.data import Dataset
 from torchvision.ops import ps_roi_align, ps_roi_pool, roi_align, roi_pool
+
 # from pycocotools import mask as maskUtils
 from torchvision.utils import save_image
 from tqdm import tqdm
 
 from trajectory import Trajectory
-from utils.general import (check_requirements, clean_str, resample_segments,
-                           segment2box, segments2boxes, xyn2xy, xywh2xyxy,
-                           xywhn2xyxy, xyxy2xywh)
+from utils.general import (
+    check_requirements,
+    clean_str,
+    resample_segments,
+    segment2box,
+    segments2boxes,
+    xyn2xy,
+    xywh2xyxy,
+    xywhn2xyxy,
+    xyxy2xywh,
+)
 from utils.torch_utils import torch_distributed_zero_first
 
 # Parameters
@@ -292,11 +301,21 @@ class LoadCamera:  # for inference
     def trajectory_init(self, img0):
         self.trajectory = Trajectory(real_time=True)
         frame_height, frame_width, frame_channel = img0.shape
-        framerate = self.cap.get(cv2.CAP_PROP_FPS)
-        self.trajectory.Set_Frame_Info(frame_height, frame_width, framerate)
+        self.trajectory.Set_Frame_Info(frame_height, frame_width, self.fps)
         self.trajectory.Mark_Perspective_Distortion_Point(img0, frame_width, frame_height)
 
-    def __init__(self, device, half, source="/dev/vidoe0", img_size=640, stride=32, model_choices=None, fps=60, height=1920, width=1080):
+    def __init__(
+        self,
+        device,
+        half,
+        source="/dev/video0",
+        img_size=640,
+        stride=32,
+        model_choices=None,
+        fps=60,
+        height=1920,
+        width=1080,
+    ):
         self.device = device
         self.half = half
         self.source = source
@@ -305,19 +324,19 @@ class LoadCamera:  # for inference
         self.mode = "video"
         self.height = height
         self.width = width
-        if self.source == "/dev/vidoe0":
+        self.fps = fps
+        if self.source == "/dev/video0":
             self.cap = cv2.VideoCapture(self.source)  # video capture object
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)  # set buffer size
             self.cap.set(cv2.CAP_PROP_FPS, fps)
             ret_val, img0 = self.cap.read()
         else:
             import ffmpeg
+
             self.process = (
-                ffmpeg
-                .input(self.source, format="decklink")
+                ffmpeg.input(self.source, format="decklink")
                 # .filter("fps", fps=60, round="up")
-                .output('pipe:', format='rawvideo', pix_fmt='rgb24')
-                .run_async(pipe_stdout=True)
+                .output("pipe:", format="rawvideo", pix_fmt="rgb24").run_async(pipe_stdout=True)
             )
             in_bytes = self.process.stdout.read(self.height * self.width * 3)
             in_frame = np.frombuffer(in_bytes, np.uint8).reshape([self.height, self.width, 3])
@@ -335,7 +354,7 @@ class LoadCamera:  # for inference
         self.count = -1
         if self.model_choices == "tracknet" or self.model_choices == "tracknet_pytorch":
             for _ in range(12):
-                if self.source == "/dev/vidoe0":
+                if self.source == "/dev/video0":
                     ret_val, img0 = self.cap.read()
                 else:
                     img0 = self.read_frame_from_ffmpeg()
@@ -369,7 +388,7 @@ class LoadCamera:  # for inference
         self.count += 1
 
         # Read frame
-        if self.source == "/dev/vidoe0":
+        if self.source == "/dev/video0":
             ret_val, img0 = self.cap.read()
         else:
             img0 = self.read_frame_from_ffmpeg()
