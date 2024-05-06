@@ -14,12 +14,19 @@ from tensorflow.keras.models import load_model
 from models.experimental import attempt_load
 from process_videos import ProcessVideos
 from utils.datasets import LoadCamera, LoadImages, LoadStreams
-from utils.general import (apply_classifier, check_img_size, check_imshow,
-                           increment_path, non_max_suppression, scale_coords,
-                           set_logging, strip_optimizer, xyxy2xywh)
+from utils.general import (
+    apply_classifier,
+    check_img_size,
+    check_imshow,
+    increment_path,
+    non_max_suppression,
+    scale_coords,
+    set_logging,
+    strip_optimizer,
+    xyxy2xywh,
+)
 from utils.plots import plot_one_box
-from utils.torch_utils import (TracedModel, load_classifier, select_device,
-                               time_synchronized)
+from utils.torch_utils import TracedModel, load_classifier, select_device, time_synchronized
 
 
 class YoloV7:
@@ -107,8 +114,7 @@ class YoloV7:
         elif opt.model_choices == "tracknet_pytorch":
             sys.path.append("../12_in_12_out_pytorch")
 
-            from unet_models.TrackNet12_3plus_lessDim_bw_pytorch import \
-                TrackNet12_3plus_lessDim_bw_pytorch
+            from unet_models.TrackNet12_3plus_lessDim_bw_pytorch import TrackNet12_3plus_lessDim_bw_pytorch
 
             model = TrackNet12_3plus_lessDim_bw_pytorch()
             checkpoint = torch.load(opt.tracknet_weights, map_location=device)
@@ -154,6 +160,7 @@ class YoloV7:
 
         if view_img:
             cv2.namedWindow("Realtime Trajectory", cv2.WINDOW_NORMAL)
+            cv2.setWindowProperty("Realtime Trajectory", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
         # yolo detect
         for path, img, im0s, vid_cap, trajectory in dataset:
@@ -259,28 +266,30 @@ class YoloV7:
                                     numerator, denominator = map(int, opt.table_botton_boundary.split("/"))
                                     if xywh[1] > (numerator / denominator):  # y軸在界線之下
                                         continue
-                            if cls  == 1: # person boundaries
-                                if opt.person_left_boundary  != "" and opt.person_right_boundary != "":
-                                    left_numerator, left_denominator = map(int, opt.person_left_boundary.split('/'))
-                                    right_numerator, right_denominator = map(int, opt.person_right_boundary.split('/'))
-                                    if xywh[0] > (left_numerator / left_denominator) and xywh[0] < (right_numerator / right_denominator): # x軸在正中間的
+                            if cls == 1:  # person boundaries
+                                if opt.person_left_boundary != "" and opt.person_right_boundary != "":
+                                    left_numerator, left_denominator = map(int, opt.person_left_boundary.split("/"))
+                                    right_numerator, right_denominator = map(int, opt.person_right_boundary.split("/"))
+                                    if xywh[0] > (left_numerator / left_denominator) and xywh[0] < (
+                                        right_numerator / right_denominator
+                                    ):  # x軸在正中間的
                                         continue
                                 if opt.person_top_boundary != "":
-                                    numerator, denominator = map(int, opt.person_top_boundary.split('/'))
-                                    if xywh[1] < (numerator / denominator): # y軸在界線之上
+                                    numerator, denominator = map(int, opt.person_top_boundary.split("/"))
+                                    if xywh[1] < (numerator / denominator):  # y軸在界線之上
                                         continue
                                 if opt.person_botton_boundary != "":
-                                    numerator, denominator = map(int, opt.person_botton_boundary.split('/'))
-                                    if xywh[1] > (numerator / denominator): # y軸在界線之下
+                                    numerator, denominator = map(int, opt.person_botton_boundary.split("/"))
+                                    if xywh[1] > (numerator / denominator):  # y軸在界線之下
                                         continue
-                            if cls == 2: # table boundaries
+                            if cls == 2:  # table boundaries
                                 if opt.table_top_boundary != "":
-                                    numerator, denominator = map(int, opt.table_top_boundary.split('/'))
-                                    if xywh[1] < (numerator / denominator): # y軸在界線之上
+                                    numerator, denominator = map(int, opt.table_top_boundary.split("/"))
+                                    if xywh[1] < (numerator / denominator):  # y軸在界線之上
                                         continue
                                 if opt.table_botton_boundary != "":
-                                    numerator, denominator = map(int, opt.table_botton_boundary.split('/'))
-                                    if xywh[1] > (numerator / denominator): # y軸在界線之下
+                                    numerator, denominator = map(int, opt.table_botton_boundary.split("/"))
+                                    if xywh[1] > (numerator / denominator):  # y軸在界線之下
                                         continue
 
                             if int(cls) == 0:
@@ -290,11 +299,21 @@ class YoloV7:
                                     most_confidence_ball_xywh = xywh
                                     most_confidence_balls.append([int(cls.item()), *xywh])
                             else:
-                                lines.append((int(cls), *xywh, conf.item()) if opt.save_conf else (int(cls), *xywh))  # label format
+                                lines.append(
+                                    (int(cls), *xywh, conf.item()) if opt.save_conf else (int(cls), *xywh)
+                                )  # label format
 
                         # 指畫出信心最高的那一顆球
-                        if most_confidence != -1 and most_confidence_ball_xyxy != None and most_confidence_ball_xywh != None:  # Add bbox to image
-                            lines.append((int(0), *most_confidence_ball_xywh, most_confidence.item()) if opt.save_conf else (int(0), *most_confidence_ball_xywh)) # label format
+                        if (
+                            most_confidence != -1
+                            and most_confidence_ball_xyxy != None
+                            and most_confidence_ball_xywh != None
+                        ):  # Add bbox to image
+                            lines.append(
+                                (int(0), *most_confidence_ball_xywh, most_confidence.item())
+                                if opt.save_conf
+                                else (int(0), *most_confidence_ball_xywh)
+                            )  # label format
                             label = f"{names[int(0)]} {most_confidence:.2f}"
                             plot_one_box(
                                 most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=1

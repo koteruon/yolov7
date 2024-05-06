@@ -17,8 +17,8 @@ import pandas as pd
 from scipy.optimize import leastsq
 
 
-class Trajectory():
-    def PJcurvature(self,x, y):
+class Trajectory:
+    def PJcurvature(self, x, y):
         # 計算離散取率
         """
         input  : the coordinate of the three point
@@ -44,8 +44,7 @@ class Trajectory():
 
         return kappa, 0
 
-
-    def Custom_Time(self,time):
+    def Custom_Time(self, time):
         # time: in milliseconds
         seconds, milliseconds = divmod(milliseconds, 1000)
         minutes, seconds = divmod(seconds, 60)
@@ -116,30 +115,25 @@ class Trajectory():
                 non_decreasing = np.all(L[1:] <= L[:-1])
                 return non_increasing or non_decreasing
 
-
     def Euclidean_Distance(self, x, y, x1, y1):
         # 計算歐式距離
         ed = math.sqrt(pow(x - x1, 2) + pow(y - y1, 2))
         return ed
-
 
     def Parabola_Function(self, params, x):
         # 拋物線函數 Parabola Function
         a, b, c = params
         return a * x**2 + b * x + c
 
-
     def Parabola_Error(self, params, x, y):
         # 拋物線偏移誤差
         return self.Parabola_Function(params, x) - y
-
 
     def Solve_Parabola(self, X, Y):
         # 解拋物線方程式
         p_arg = [10, 10, 10]
         parabola = leastsq(self.Parabola_Error, p_arg, args=(X, Y))
         return parabola
-
 
     def Perspective_Transform(self, matrix, coord):
         # 透視變形轉換
@@ -152,7 +146,6 @@ class Trajectory():
         PT = (int(x), int(y))
         return PT
 
-
     def Generate_HeatMap(self, w, h, x_c, y_c, r, mag):
         # 生成熱力圖(觀察球的mask)
         if x_c < 0 or y_c < 0:
@@ -163,14 +156,12 @@ class Trajectory():
         heatmap[heatmap > r**2] = 0
         return heatmap * mag
 
-
     def Count_BounceLocation(self, frame):
         # 落點分析 bounce analyize function
         row = int(frame[0] / int(self.miniboard_width / 4))
         column = int(frame[1] / int(self.miniboard_height / 3))
         if 0 <= row < 4 and 0 <= column < 3:
             self.bounce_location_list[row][column] += 1
-
 
     def Detect_Color_Level(self, score, side, side_min, side_max):
         # 判斷落點方
@@ -196,7 +187,6 @@ class Trajectory():
                 gray_level_max - normalize_score,
             )
             return color
-
 
     def Draw_Bounce_Analysis(self):
         # 落點分析圖
@@ -266,6 +256,7 @@ class Trajectory():
                     1,
                     cv2.LINE_AA,
                 )
+
     def Show_Bounce_Analysis(self):
         cv2.imshow(self.bounce_analysis_title, self.bounce_analyze_img)
 
@@ -334,9 +325,11 @@ class Trajectory():
             cv2.imshow(self.speed_distribution_title, cv2.cvtColor(fig_img, cv2.COLOR_RGBA2BGR))
         plt.clf()
 
-
     def Draw_MiniBoard(self, option=None):
-        img_opt = np.zeros([self.miniboard_height + self.miniboard_edge * 2, self.miniboard_width + self.miniboard_edge * 2, 3], dtype=np.uint8)
+        img_opt = np.zeros(
+            [self.miniboard_height + self.miniboard_edge * 2, self.miniboard_width + self.miniboard_edge * 2, 3],
+            dtype=np.uint8,
+        )
         cv2.rectangle(
             img_opt,
             (self.miniboard_edge, self.miniboard_edge),
@@ -369,7 +362,10 @@ class Trajectory():
             cv2.line(
                 img_opt,
                 (int((self.miniboard_width / 4) * 3) + self.miniboard_edge, self.miniboard_edge),
-                (int((self.miniboard_width / 4) * 3) + self.miniboard_edge, self.miniboard_height + self.miniboard_edge),
+                (
+                    int((self.miniboard_width / 4) * 3) + self.miniboard_edge,
+                    self.miniboard_height + self.miniboard_edge,
+                ),
                 (128, 0, 128),
                 3,
             )
@@ -383,12 +379,14 @@ class Trajectory():
             cv2.line(
                 img_opt,
                 (self.miniboard_edge, int((self.miniboard_height / 3) * 2) + self.miniboard_edge),
-                (self.miniboard_width + self.miniboard_edge, int((self.miniboard_height / 3) * 2) + self.miniboard_edge),
+                (
+                    self.miniboard_width + self.miniboard_edge,
+                    int((self.miniboard_height / 3) * 2) + self.miniboard_edge,
+                ),
                 (128, 0, 128),
                 3,
             )
         return img_opt
-
 
     def Draw_Circle(self, event, x, y, flags, param):
         # 用於透視變形取點
@@ -396,7 +394,6 @@ class Trajectory():
             cv2.circle(param["img"], (x, y), 3, (0, 255, 255), -1)
             param["point_x"].append(x)
             param["point_y"].append(y)
-
 
     def Draw_and_Collect_Data(
         self,
@@ -416,9 +413,7 @@ class Trajectory():
             4,
         )
         # analyze location
-        self.Count_BounceLocation(
-            self.PT_dict[self.count]
-        )
+        self.Count_BounceLocation(self.PT_dict[self.count])
         if self.is_show_bounce_analysis:
             self.Draw_Bounce_Analysis()
             self.Show_Bounce_Analysis()
@@ -482,7 +477,7 @@ class Trajectory():
             bounce_img_path,
             keypoints_path,
             speedhis_path,
-            speed_distribution_path
+            speed_distribution_path,
         )
 
     def Read_Video(self):
@@ -574,8 +569,7 @@ class Trajectory():
         if self.is_show_bounce_location:
             self.Show_Bounce_Location()
 
-
-    def Read_Yolo_Label_One_Frame(self, label_file=None, balls=None, x_c_pred = None, y_c_pred = None):
+    def Read_Yolo_Label_One_Frame(self, label_file=None, balls=None, x_c_pred=None, y_c_pred=None):
         if x_c_pred != None and y_c_pred != None:
             self.x_c_pred, self.y_c_pred = x_c_pred, y_c_pred
             return
@@ -614,14 +608,14 @@ class Trajectory():
         image_CV = image.copy()
 
         ## 有偵測到球體
-        if self.x_c_pred!=np.inf and self.y_c_pred!=np.inf:
+        if self.x_c_pred != np.inf and self.y_c_pred != np.inf:
             balls = 5 if self.is_first_ball else 9
             x_tmp = [self.q[j][0] for j in range(balls) if self.q[j] is not None]
             y_tmp = [self.q[j][1] for j in range(balls) if self.q[j] is not None]
             ## 落點預測 ######################################################################################################
             if len(x_tmp) >= 3:
                 # 檢查是否嚴格遞增或嚴格遞減,(軌跡方向是否相同)
-                isSameWay= self.Monotonic(np.array(x_tmp), strictly=False, half=True)
+                isSameWay = self.Monotonic(np.array(x_tmp), strictly=False, half=True)
                 # 累積有三顆球的軌跡且同一方向, 可計算拋物線
                 if isSameWay:
                     parabola = self.Solve_Parabola(np.array(x_tmp), np.array(y_tmp))
@@ -700,7 +694,10 @@ class Trajectory():
                                         # miniboard轉成真實CM距離，加上上一球推測的距離，除以時間
                                         self.speed_right = np.round(
                                             (
-                                                (bounce_len * (self.miniboard_to_real_ratio) + speed_bounce_distance_right)
+                                                (
+                                                    bounce_len * (self.miniboard_to_real_ratio)
+                                                    + speed_bounce_distance_right
+                                                )
                                                 / (self.count - self.right_shot_count)
                                             )
                                             * self.framerate
@@ -782,7 +779,10 @@ class Trajectory():
                                         )
                                         self.speed_left = np.round(
                                             (
-                                                (bounce_len * (self.miniboard_to_real_ratio) + speed_bounce_distance_left)
+                                                (
+                                                    bounce_len * (self.miniboard_to_real_ratio)
+                                                    + speed_bounce_distance_left
+                                                )
                                                 / (self.count - self.left_shot_count)
                                             )
                                             * self.framerate
@@ -835,7 +835,9 @@ class Trajectory():
         return image_CV
 
     def Add_Ball_In_Queue(self):
-        self.q.appendleft((self.x_c_pred, self.y_c_pred) if self.x_c_pred!=np.inf and self.y_c_pred!=np.inf else None)
+        self.q.appendleft(
+            (self.x_c_pred, self.y_c_pred) if self.x_c_pred != np.inf and self.y_c_pred != np.inf else None
+        )
         self.q.pop()
 
         self.q_bv.appendleft(None)
@@ -866,7 +868,6 @@ class Trajectory():
 
         return ball_direction, ball_direction_last
 
-
     def Draw_On_Image(self, image_CV, ball_direction):
         # draw current frame prediction and previous 11 frames as yellow circle, total: 12 frames
         for i in range(12):
@@ -885,57 +886,149 @@ class Trajectory():
         ] = self.img_opt
 
         # 將球的方向判斷出來
-        if ball_direction != None and ball_direction > 0:  # Direction right
-            cv2.putText(
-                image_CV,
-                "right",
-                (240, 180),
-                cv2.FONT_HERSHEY_TRIPLEX,
-                1,
-                (0, 255, 255),
-                1,
-                cv2.LINE_AA,
-            )
-        elif ball_direction != None and ball_direction < 0:  # Direction left
-            cv2.putText(
-                image_CV,
-                "left",
-                (240, 180),
-                cv2.FONT_HERSHEY_TRIPLEX,
-                1,
-                (0, 255, 255),
-                1,
-                cv2.LINE_AA,
-            )
+        if not self.only_speed:
+            if ball_direction != None and ball_direction > 0:  # Direction right
+                cv2.putText(
+                    image_CV,
+                    "right",
+                    (240, 100),
+                    cv2.FONT_HERSHEY_TRIPLEX,
+                    1,
+                    (0, 255, 255),
+                    1,
+                    cv2.LINE_AA,
+                )
+            elif ball_direction != None and ball_direction < 0:  # Direction left
+                cv2.putText(
+                    image_CV,
+                    "left",
+                    (240, 100),
+                    cv2.FONT_HERSHEY_TRIPLEX,
+                    1,
+                    (0, 255, 255),
+                    1,
+                    cv2.LINE_AA,
+                )
 
         # 標示出球速
-        if self.MAX_velo > 113:
+        if not self.only_speed:
+            if self.MAX_velo > 113:
+                cv2.putText(
+                    image_CV,
+                    "          " + "Loss",
+                    (10, 40),
+                    cv2.FONT_HERSHEY_TRIPLEX,
+                    1,
+                    (0, 255, 255),
+                    1,
+                    cv2.LINE_AA,
+                )
+            elif ball_direction is not None:
+                cv2.putText(
+                    image_CV,
+                    "          " + str(self.shotspeed),
+                    (10, 40),
+                    cv2.FONT_HERSHEY_TRIPLEX,
+                    1,
+                    (0, 255, 255),
+                    1,
+                    cv2.LINE_AA,
+                )
+            # 無法辨別球路方向時
+            else:
+                cv2.putText(
+                    image_CV,
+                    "          " + "0",
+                    (10, 40),
+                    cv2.FONT_HERSHEY_TRIPLEX,
+                    1,
+                    (0, 255, 255),
+                    1,
+                    cv2.LINE_AA,
+                )
+        else:
+            if self.MAX_velo > 113:
+                cv2.putText(
+                    image_CV,
+                    "         " + "Loss",
+                    (10, 80),
+                    cv2.FONT_HERSHEY_TRIPLEX,
+                    2,
+                    (0, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+            elif ball_direction is not None:
+                cv2.putText(
+                    image_CV,
+                    "         " + str(self.shotspeed),
+                    (10, 80),
+                    cv2.FONT_HERSHEY_TRIPLEX,
+                    2,
+                    (0, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+            # 無法辨別球路方向時
+            else:
+                cv2.putText(
+                    image_CV,
+                    "         " + "0",
+                    (10, 80),
+                    cv2.FONT_HERSHEY_TRIPLEX,
+                    2,
+                    (0, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+
+        # 其他左上角的文字
+        if not self.only_speed:
             cv2.putText(
                 image_CV,
-                "              " + "Loss",
-                (10, 100),
+                "Speed:",
+                (10, 40),
                 cv2.FONT_HERSHEY_TRIPLEX,
                 1,
                 (0, 255, 255),
                 1,
                 cv2.LINE_AA,
             )
-        elif ball_direction is not None:
             cv2.putText(
                 image_CV,
-                "              " + str(self.shotspeed),
-                (10, 100),
+                "(Km/Hr)",
+                (260, 40),
                 cv2.FONT_HERSHEY_TRIPLEX,
                 1,
                 (0, 255, 255),
                 1,
                 cv2.LINE_AA,
             )
-        # 無法辨別球路方向時
         else:
             cv2.putText(
                 image_CV,
-                "              " + "0",
+                "Speed:",
+                (10, 80),
+                cv2.FONT_HERSHEY_TRIPLEX,
+                2,
+                (0, 255, 255),
+                2,
+                cv2.LINE_AA,
+            )
+            cv2.putText(
+                image_CV,
+                "(Km/Hr)",
+                (10, 160),
+                cv2.FONT_HERSHEY_TRIPLEX,
+                2,
+                (0, 255, 255),
+                2,
+                cv2.LINE_AA,
+            )
+        if not self.only_speed:
+            cv2.putText(
+                image_CV,
+                "Direction :",
                 (10, 100),
                 cv2.FONT_HERSHEY_TRIPLEX,
                 1,
@@ -943,48 +1036,16 @@ class Trajectory():
                 1,
                 cv2.LINE_AA,
             )
-
-        # 其他左上角的文字
-        cv2.putText(
-            image_CV,
-            "velocity:",
-            (10, 100),
-            cv2.FONT_HERSHEY_TRIPLEX,
-            1,
-            (0, 255, 255),
-            1,
-            cv2.LINE_AA,
-        )
-        cv2.putText(
-            image_CV,
-            "(km/hr)",
-            (10, 140),
-            cv2.FONT_HERSHEY_TRIPLEX,
-            1,
-            (0, 255, 255),
-            1,
-            cv2.LINE_AA,
-        )
-        cv2.putText(
-            image_CV,
-            "direction :",
-            (10, 180),
-            cv2.FONT_HERSHEY_TRIPLEX,
-            1,
-            (0, 255, 255),
-            1,
-            cv2.LINE_AA,
-        )
-        cv2.putText(
-            image_CV,
-            f"Frame : {self.count}",
-            (10, 260),
-            cv2.FONT_HERSHEY_TRIPLEX,
-            1,
-            (0, 255, 255),
-            1,
-            cv2.LINE_AA,
-        )
+            cv2.putText(
+                image_CV,
+                f"Frame : {self.count}",
+                (10, 160),
+                cv2.FONT_HERSHEY_TRIPLEX,
+                1,
+                (0, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
 
         return image_CV
 
@@ -992,13 +1053,16 @@ class Trajectory():
         bounce_loc_pd = pd.DataFrame(self.bounce_location_list)
         bounce_loc_pd.to_csv(f"{self.bounce_loc_path}/{self.video_name}_bounce_list.csv", index=False)
 
-    def __init__(self,real_time=False):
+    def __init__(self, real_time=False):
+        # temp#
+        self.only_speed = False
+
         self.HEIGHT = 288  # model input size
         self.WIDTH = 512
 
         # 影片跟目錄
-        root_path = f"./runs/detect/C00050015"
-        video_fullname = "C00050015.mp4"
+        root_path = f"./runs/detect/yolov7_20240505_60fps4"
+        video_fullname = "22.mp4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
         self.input_path = os.path.join(root_path, video_fullname)
@@ -1014,15 +1078,15 @@ class Trajectory():
             self.bounce_img_path,
             keypoints_path,
             self.speedhis_path,
-            self.speed_distribution_path
+            self.speed_distribution_path,
         ) = self.Create_Output_Dir(output_path, self.video_name)
 
         # yolo labels path
         self.label_path = os.path.join(root_path, "labels")
 
         # miniboard 的大小
-        self.miniboard_width = 544 # 原先為548
-        self.miniboard_height = 285 # 原先為305
+        self.miniboard_width = 544  # 原先為548
+        self.miniboard_height = 285  # 原先為305
         self.miniboard_edge = 20
         self.miniboard_text_bias = 60
 
@@ -1053,9 +1117,9 @@ class Trajectory():
         self.now_player = 0  # 0:左邊選手, 1: 右邊選手
         self.hit_count = 0  # 擊球次數
         self.count = 1  # 記錄處理幾個 Frame
-        self.MAX_velo = 0 # 最大球速
+        self.MAX_velo = 0  # 最大球速
         self.x_c_pred, self.y_c_pred = np.inf, np.inf  # 球體中心位置
-        self.is_first_ball = True #每局第一球的時候frame只要5個，其他時間要9個
+        self.is_first_ball = True  # 每局第一球的時候frame只要5個，其他時間要9個
         self.is_serve_wait = False
         self.shotspeed = 0
         self.shotspeed_previous = 0
@@ -1079,7 +1143,7 @@ class Trajectory():
             self.Draw_SpeedHist(save=False, show=True)
             self.video_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    def Set_Frame_Info(self,frame_height, frame_width, framerate):
+    def Set_Frame_Info(self, frame_height, frame_width, framerate):
         self.frame_height = frame_height
         self.frame_width = frame_width
         self.framerate = framerate

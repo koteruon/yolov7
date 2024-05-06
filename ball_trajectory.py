@@ -46,6 +46,7 @@ def Solve_Parabola(X, Y):
     parabola = leastsq(Parabola_Error, p_arg, args=(X, Y))
     return parabola
 
+
 def Draw_MiniBoard(height, width, edge, upper_left_target, lower_right_target):
     img_opt = np.zeros([height + edge * 2, width + edge * 2, 3], dtype=np.uint8)
     cv2.rectangle(
@@ -73,10 +74,11 @@ def Draw_MiniBoard(height, width, edge, upper_left_target, lower_right_target):
         img_opt,
         upper_left_target,
         lower_right_target,
-        color=(52,192,255),
+        color=(52, 192, 255),
         thickness=5,
     )
     return img_opt
+
 
 def Perspective_Transform(matrix, coord):
     # 透視變形轉換
@@ -98,14 +100,16 @@ def Draw_Circle(event, x, y, flags, param):
         param["point_y"].append(y)
 
 
-def perspective_distortion_correlation(miniboard_height, miniboard_width,miniboard_edge, image, frame_width, frame_height):
+def perspective_distortion_correlation(
+    miniboard_height, miniboard_width, miniboard_edge, image, frame_width, frame_height
+):
     # 點選透視變形位置, 順序為:左上,左下,右下,右上
     PT_dict = {}
     PT_data = {"img": image.copy(), "point_x": [], "point_y": []}
     # TODO: 測試用
     # 010六角正手拉黑色
-    PT_data["point_x"] = [565,390,1657,1457,1353,1384,1500,1457]
-    PT_data["point_y"] = [697,766,773,697,697,718,713,697]
+    PT_data["point_x"] = [565, 390, 1657, 1457, 1353, 1384, 1500, 1457]
+    PT_data["point_y"] = [697, 766, 773, 697, 697, 718, 713, 697]
     # TODO 測試用
     # 010傳統反手拉紅色
     # PT_data["point_x"] = [575,405,1674,1475,1475,1526,1674,1595]
@@ -148,7 +152,7 @@ def perspective_distortion_correlation(miniboard_height, miniboard_width,miniboa
     lower_left_target = Perspective_Transform(matrix_table, lower_left)
     lower_right_target = Perspective_Transform(matrix_table, lower_right)
     upper_right_target = Perspective_Transform(matrix_table, upper_right)
-    return matrix_table, inv_table, upper_left_target, lower_left_target,lower_right_target, upper_right_target
+    return matrix_table, inv_table, upper_left_target, lower_left_target, lower_right_target, upper_right_target
 
 
 def subtask(v_name, v_path, lbl_dir):
@@ -161,7 +165,7 @@ def subtask(v_name, v_path, lbl_dir):
         # (1056, 1250),
         (1842, 2070),
         # (2634, 2840),
-        (3456, 3660)
+        (3456, 3660),
     ]
 
     # 010傳統反手拉紅色
@@ -218,16 +222,20 @@ def subtask(v_name, v_path, lbl_dir):
     miniboard_text_bias = 60
 
     # 透視變形矯正
-    matrix, inv, upper_left_target, lower_left_target,lower_right_target, upper_right_target = perspective_distortion_correlation(miniboard_height, miniboard_width,miniboard_edge,frame, frame_width, frame_height)
+    matrix, inv, upper_left_target, lower_left_target, lower_right_target, upper_right_target = (
+        perspective_distortion_correlation(
+            miniboard_height, miniboard_width, miniboard_edge, frame, frame_width, frame_height
+        )
+    )
 
-    img_opt = Draw_MiniBoard(miniboard_height,miniboard_width,miniboard_edge, upper_left_target, lower_right_target)
+    img_opt = Draw_MiniBoard(miniboard_height, miniboard_width, miniboard_edge, upper_left_target, lower_right_target)
 
     # 球速計算變數
     # In order to draw the trajectory of tennis, we need to save the coordinate of preious 12 frames
     q = queue.deque([None for _ in range(12)])
 
     # 落點計算變數
-    has_landed=False
+    has_landed = False
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -236,7 +244,7 @@ def subtask(v_name, v_path, lbl_dir):
             break
 
         if frame_number == 3559:
-            print("frame_number: "+ str(frame_number) )
+            print("frame_number: " + str(frame_number))
 
         lbl_cnt = int(lbl.replace(f"{v_name}_", "").split(".")[0])
         if frame_number != lbl_cnt:
@@ -312,7 +320,13 @@ def subtask(v_name, v_path, lbl_dir):
                             # 落點在右側
                             if loc_PT[0] >= int(miniboard_width / 2) + miniboard_edge:
                                 if not has_landed:
-                                    img_opt = Draw_MiniBoard(miniboard_height,miniboard_width,miniboard_edge, upper_left_target, lower_right_target)
+                                    img_opt = Draw_MiniBoard(
+                                        miniboard_height,
+                                        miniboard_width,
+                                        miniboard_edge,
+                                        upper_left_target,
+                                        lower_right_target,
+                                    )
                                     cv2.circle(img_opt, loc_PT, 5, (0, 0, 255), 4)  # red
                                     has_landed = True
                 else:
@@ -358,7 +372,6 @@ def subtask(v_name, v_path, lbl_dir):
             past_idx = min(past_)
             # if stop_idx == 0:
             #     stop_idx = past_[0]
-
 
         for b_cnt, b_idx in enumerate(past_):
             # if b_idx == stop_idx:
