@@ -92,6 +92,8 @@ class YoloV7:
                 model = TracedModel(model, device, opt.img_size)
             if half:
                 model.half()  # to FP16
+            frame_height = 1080
+            frame_width = 1920
         elif opt.model_choices == "tracknet":
             sys.path.append("../12_in_12_out_pytorch")
             import os
@@ -100,6 +102,7 @@ class YoloV7:
             model = load_model(opt.tracknet_weights, custom_objects={"custom_loss": self.TrackNet_Custom_Loss})
             stride = None
             frame_height = 1080
+            frame_width = 1920
             HEIGHT = 288  # model input size
             WIDTH = 512
             imgsz = (HEIGHT, WIDTH)
@@ -119,6 +122,7 @@ class YoloV7:
             model.eval()
             stride = None
             frame_height = 1080
+            frame_width = 1920
             HEIGHT = 288  # model input size
             WIDTH = 512
             imgsz = (HEIGHT, WIDTH)
@@ -135,7 +139,7 @@ class YoloV7:
         cudnn.enabled = True  # set True to speed up constant image size inference
         cudnn.benchmark = True  # set True to speed up constant image size inference
         dataset = LoadCamera(
-            device, half, source, img_size=imgsz, stride=stride, model_choices=opt.model_choices, fps=int(opt.fps)
+            device, half, source, img_size=imgsz, stride=stride, model_choices=opt.model_choices, fps=int(opt.fps), height=frame_height, width=frame_width,
         )
         process_video = ProcessVideos()
 
@@ -159,7 +163,7 @@ class YoloV7:
 
         t4 = time_synchronized()
         # yolo detect
-        for path, img, im0s, vid_cap, trajectory in dataset:
+        for img, im0s, trajectory in dataset:
             # Warmup
             if opt.model_choices == "yolo":
                 if device.type != "cpu" and (
