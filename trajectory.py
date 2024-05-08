@@ -610,15 +610,24 @@ class Trajectory:
         ## 有偵測到球體
         if self.x_c_pred != np.inf and self.y_c_pred != np.inf:
             balls = 5 if self.is_first_ball else 9
-            x_tmp = [self.q[j][0] for j in range(balls) if self.q[j] is not None]
-            y_tmp = [self.q[j][1] for j in range(balls) if self.q[j] is not None]
+            q_array = np.array(self.q)
+            non_negatives_idx = np.where(np.all(q_array != (-1, -1), axis=1))[0][:balls]
+            q_array = q_array[non_negatives_idx]
+            if q_array.size == 0:
+                x_tmp = np.array([])
+                y_tmp = np.array([])
+            else:
+                x_tmp = q_array[:, 0]
+                y_tmp = q_array[:, 1]
+            # x_tmp = [self.q[j][0] for j in range(balls) if self.q[j] is not None]
+            # y_tmp = [self.q[j][1] for j in range(balls) if self.q[j] is not None]
             ## 落點預測 ######################################################################################################
             if len(x_tmp) >= 3:
                 # 檢查是否嚴格遞增或嚴格遞減,(軌跡方向是否相同)
-                isSameWay = self.Monotonic(np.array(x_tmp), strictly=False, half=True)
+                isSameWay = self.Monotonic(x_tmp, strictly=False, half=True)
                 # 累積有三顆球的軌跡且同一方向, 可計算拋物線
                 if isSameWay:
-                    parabola = self.Solve_Parabola(np.array(x_tmp), np.array(y_tmp))
+                    parabola = self.Solve_Parabola(x_tmp, y_tmp)
                     a, b, c = parabola[0]
                     fit = a * self.x_c_pred**2 + b * self.x_c_pred + c
                     # cv2.circle(image_CV, (self.x_c_pred, int(fit)), 5, (255, 0, 0), 4)
@@ -836,16 +845,16 @@ class Trajectory:
 
     def Add_Ball_In_Queue(self):
         self.q.appendleft(
-            (self.x_c_pred, self.y_c_pred) if self.x_c_pred != np.inf and self.y_c_pred != np.inf else None
+            (self.x_c_pred, self.y_c_pred) if self.x_c_pred != np.inf and self.y_c_pred != np.inf else (-1, -1)
         )
         self.q.pop()
 
-        self.q_bv.appendleft(None)
+        self.q_bv.appendleft((-1, -1))
         self.q_bv.pop()
 
     def Detect_Ball_Direction(self):
         ball_direction, ball_direction_last = None, None
-        if self.q[0] is not None and self.q[1] is not None and self.q[2] is not None:
+        if self.q[0] != (-1, -1) and self.q[1] != (-1, -1) and self.q[2] != (-1, -1):
             ball_direction = self.q[0][0] - self.q[1][0]
             ball_direction_last = self.q[1][0] - self.q[2][0]
             if self.MAX_velo == 0:
@@ -871,12 +880,12 @@ class Trajectory:
     def Draw_On_Image(self, image_CV, ball_direction):
         # draw current frame prediction and previous 11 frames as yellow circle, total: 12 frames
         for i in range(12):
-            if self.q[i] is not None:
+            if self.q[i] != (-1, -1):
                 cv2.circle(image_CV, (self.q[i][0], self.q[i][1]), 5, (0, 255, 255), 1)
 
         # draw bounce point as red circle
         for i in range(6):
-            if self.q_bv[i] is not None:
+            if self.q_bv[i] != (-1, -1):
                 cv2.circle(image_CV, (self.q_bv[i][0], self.q_bv[i][1]), 5, (0, 0, 255), 4)
 
         # Place miniboard on upper right corner
@@ -1101,10 +1110,10 @@ class Trajectory:
         self.PT_dict = {}
 
         # In order to draw the trajectory of tennis, we need to save the coordinate of preious 12 frames
-        self.q = queue.deque([None for _ in range(12)])
+        self.q = queue.deque([(-1, -1) for _ in range(12)])
 
         # bounce detection init
-        self.q_bv = queue.deque([None for _ in range(6)])
+        self.q_bv = queue.deque([(-1, -1) for _ in range(6)])
 
         # 參數
         self.bounce = []
