@@ -393,7 +393,8 @@ class LoadCamera:  # for inference
         else:
             img0 = self.read_frame_from_ffmpeg()
 
-        if cv2.waitKey(1) == ord("q"):  # q to quit
+        key = cv2.waitKey(1)
+        if key == ord("q"):  # q to quit
             self.trajectory.Write_Bounce_Location()
             # output bouncing analyze img
             self.trajectory.Draw_Bounce_Analysis()
@@ -409,7 +410,7 @@ class LoadCamera:  # for inference
             cv2.destroyAllWindows()
             raise StopIteration
 
-        if cv2.waitKey(1) == ord("e"):  # e to end
+        if key == ord("e"):  # e to end
             if self.trajectory:
                 self.trajectory.Write_Bounce_Location()
                 # output bouncing analyze img
@@ -424,12 +425,9 @@ class LoadCamera:  # for inference
                 del self.trajectory
                 self.trajectory = None
 
-        if cv2.waitKey(1) == ord("s"):  # s to start
+        if key == ord("s"):  # s to start
             if not self.trajectory:
                 self.trajectory_init(img0)  # 落點
-
-        # Print
-        print(f"webcam {self.count}: ", end="")
 
         if self.model_choices == "yolo":
             # Padded resize

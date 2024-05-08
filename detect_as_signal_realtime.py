@@ -145,7 +145,15 @@ class YoloV7:
         cudnn.enabled = True  # set True to speed up constant image size inference
         cudnn.benchmark = True  # set True to speed up constant image size inference
         dataset = LoadCamera(
-            device, half, source, img_size=imgsz, stride=stride, model_choices=opt.model_choices, fps=int(opt.fps), height=frame_height, width=frame_width,
+            device,
+            half,
+            source,
+            img_size=imgsz,
+            stride=stride,
+            model_choices=opt.model_choices,
+            fps=int(opt.fps),
+            height=frame_height,
+            width=frame_width,
         )
         process_video = ProcessVideos()
 
@@ -165,7 +173,6 @@ class YoloV7:
         if view_img:
             cv2.namedWindow("Realtime Trajectory", cv2.WINDOW_NORMAL)
             cv2.setWindowProperty("Realtime Trajectory", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-
 
         t4 = time_synchronized()
         # yolo detect
