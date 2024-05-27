@@ -15,6 +15,7 @@ import numpy as np
 import numpy.linalg as LA
 import pandas as pd
 from scipy.optimize import leastsq
+from tqdm import tqdm
 
 
 class Trajectory:
@@ -257,6 +258,9 @@ class Trajectory:
                     cv2.LINE_AA,
                 )
 
+    def Show_Bounce(self):
+        cv2.imshow(self.bounce_title, self.img_opt)
+
     def Show_Bounce_Analysis(self):
         cv2.imshow(self.bounce_analysis_title, self.bounce_analyze_img)
 
@@ -480,7 +484,7 @@ class Trajectory:
             speed_distribution_path,
         )
 
-    def Read_Video(self):
+    def Read_Video(self, input_path):
         # 讀取影片
         # 選擇影片編碼
         if self.video_suffix in [".avi"]:
@@ -492,7 +496,7 @@ class Trajectory:
             exit(1)
 
         # 讀取影片
-        cap = cv2.VideoCapture(self.input_path)
+        cap = cv2.VideoCapture(input_path)
         success, image = cap.read()
         if not success:
             raise Exception("Could not read")
@@ -515,7 +519,7 @@ class Trajectory:
 
         # 寫 預測結果
         output = cv2.VideoWriter(
-            f"{video_path}/{self.video_name}_predict_12.mp4",
+            video_path,
             fourcc,
             self.framerate,
             size,
@@ -841,6 +845,12 @@ class Trajectory:
                 self.bounce_frame_L, self.bounce_frame_R = -1, -1
                 self.hit_count = 0
 
+            if self.is_record_ball:
+                self.record_ball[self.count] = {
+                    "x_c_pred": self.x_c_pred,
+                    "y_c_pred": self.y_c_pred,
+                    "speed": self.shotspeed,
+                }
         return image_CV
 
     def Add_Ball_In_Queue(self):
@@ -889,10 +899,14 @@ class Trajectory:
                 cv2.circle(image_CV, (self.q_bv[i][0], self.q_bv[i][1]), 5, (0, 0, 255), 4)
 
         # Place miniboard on upper right corner
-        image_CV[
-            : self.miniboard_height + self.miniboard_edge * 2,
-            self.frame_width - (self.miniboard_width + self.miniboard_edge * 2) :,
-        ] = self.img_opt
+        if self.is_show_bounce:
+            if self.is_show_bounce_window:
+                self.Show_Bounce()
+            else:
+                image_CV[
+                    : self.miniboard_height + self.miniboard_edge * 2,
+                    self.frame_width - (self.miniboard_width + self.miniboard_edge * 2) :,
+                ] = self.img_opt
 
         # 將球的方向判斷出來
         if not self.only_speed:
@@ -1062,6 +1076,33 @@ class Trajectory:
         bounce_loc_pd = pd.DataFrame(self.bounce_location_list)
         bounce_loc_pd.to_csv(f"{self.bounce_loc_path}/{self.video_name}_bounce_list.csv", index=False)
 
+    def Draw_Speed_Under_Ball(self, image):
+        if self.count in self.record_ball:
+            # word position
+            x_c_pred, y_c_pred, speed = (
+                self.record_ball[self.count]["x_c_pred"],
+                self.record_ball[self.count]["y_c_pred"],
+                self.record_ball[self.count]["speed"],
+            )
+            interval = 50
+            word_x, word_y = x_c_pred, y_c_pred + interval
+
+            # text style
+            text = str(speed)
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 1
+            font_thickness = 2
+
+            # center
+            text_size = cv2.getTextSize(text, font, font_scale, font_thickness)[0]
+            word_x, word_y = word_x - text_size[0] // 2, word_y + text_size[1] // 2
+
+            # add text
+            cv2.putText(image, text, (word_x, word_y), font, font_scale, (255, 255, 255), font_thickness)
+        else:
+            print(self.count)
+        return image
+
     def __init__(self, real_time=False):
         # temp#
         self.only_speed = False
@@ -1071,7 +1112,7 @@ class Trajectory:
 
         # 影片跟目錄
         root_path = f"./runs/detect/yolov7_20240505_60fps4"
-        video_fullname = "22.mp4"
+        video_fullname = "23.mp4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
         self.input_path = os.path.join(root_path, video_fullname)
@@ -1134,10 +1175,15 @@ class Trajectory:
         self.shotspeed_previous = 0
 
         # 顯示參數
+        self.is_show_bounce = True
+        self.is_show_bounce_window = False
         self.is_show_bounce_analysis = False
         self.is_show_bounce_location = False
         self.is_show_speed_analysis = False
         if real_time:
+            self.is_show_bounce_window = True
+            self.bounce_title = "Bounce"
+            cv2.namedWindow(self.bounce_title, cv2.WINDOW_NORMAL)
             self.is_show_bounce_analysis = True
             self.bounce_analysis_title = "Bounce Analysis"
             cv2.namedWindow(self.bounce_analysis_title, cv2.WINDOW_NORMAL)
@@ -1152,6 +1198,10 @@ class Trajectory:
             self.Draw_SpeedHist(save=False, show=True)
             self.video_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
+        self.is_record_ball = True
+        if self.is_record_ball:
+            self.record_ball = {}
+
     def Set_Frame_Info(self, frame_height, frame_width, framerate):
         self.frame_height = frame_height
         self.frame_width = frame_width
@@ -1163,7 +1213,7 @@ class Trajectory:
     ### 後處理從此開始 ###
     def main(self):
         # 讀影片
-        success, image, cap, framerate, frame_height, frame_width, total_frames = self.Read_Video()
+        success, image, cap, framerate, frame_height, frame_width, total_frames = self.Read_Video(self.input_path)
         self.Set_Frame_Info(frame_height, frame_width, framerate)
 
         # 等比例縮放
@@ -1171,7 +1221,8 @@ class Trajectory:
         size = (int(self.WIDTH * ratio), int(self.HEIGHT * ratio))
 
         # 寫 預測結果
-        output = self.Write_Video(self.video_path, size)
+        video_path = f"{self.video_path}/{self.video_name}_predict_12.mp4"
+        output = self.Write_Video(video_path, size)
 
         # 透視變形
         self.Mark_Perspective_Distortion_Point(image, self.frame_width, self.frame_height)
@@ -1214,6 +1265,28 @@ class Trajectory:
 
         # For saving speedHist
         self.Draw_SpeedHist()
+
+        if self.is_record_ball:
+            # input video
+            success, image, cap, framerate, frame_height, frame_width, total_frames = self.Read_Video(video_path)
+            self.Set_Frame_Info(frame_height, frame_width, framerate)
+            self.count = 1
+
+            # output video
+            video_path_with_speed = f"{self.video_path}/{self.video_name}_predict_12_with_speed.mp4"
+            output = self.Write_Video(video_path_with_speed, size)
+
+            with tqdm(total=total_frames) as pbar:
+                while success:
+                    image = self.Draw_Speed_Under_Ball(image)
+                    self.Next_Count()
+                    output.write(image)
+                    success, image = cap.read()
+                    pbar.update(1)
+
+            # For releasing cap and out.
+            cap.release()
+            output.release()
 
         end = time.time()
         print(f"Write video time: {end-start} seconds.")

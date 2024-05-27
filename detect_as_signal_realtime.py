@@ -154,6 +154,7 @@ class YoloV7:
             fps=int(opt.fps),
             height=frame_height,
             width=frame_width,
+            opencv_or_ffmpeg=opt.opencv_or_ffmpeg,
         )
         process_video = ProcessVideos()
 
@@ -399,6 +400,7 @@ if __name__ == "__main__":
         help="tracknet weights",
     )
     parser.add_argument("--fps", default="60", help="fps")
+    parser.add_argument("--opencv-or-ffmpeg", default="opencv", help="opencv or ffmpeg")
     opt = parser.parse_args()
     print(opt)
     # check_requirements(exclude=('pycocotools', 'thop'))

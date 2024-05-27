@@ -21,23 +21,14 @@ import torch.nn.functional as F
 from PIL import ExifTags, Image
 from torch.utils.data import Dataset
 from torchvision.ops import ps_roi_align, ps_roi_pool, roi_align, roi_pool
-
 # from pycocotools import mask as maskUtils
 from torchvision.utils import save_image
 from tqdm import tqdm
 
 from trajectory import Trajectory
-from utils.general import (
-    check_requirements,
-    clean_str,
-    resample_segments,
-    segment2box,
-    segments2boxes,
-    xyn2xy,
-    xywh2xyxy,
-    xywhn2xyxy,
-    xyxy2xywh,
-)
+from utils.general import (check_requirements, clean_str, resample_segments,
+                           segment2box, segments2boxes, xyn2xy, xywh2xyxy,
+                           xywhn2xyxy, xyxy2xywh)
 from utils.torch_utils import torch_distributed_zero_first
 
 # Parameters
@@ -315,6 +306,7 @@ class LoadCamera:  # for inference
         fps=60,
         height=1920,
         width=1080,
+        opencv_or_ffmpeg="opencv",
     ):
         self.device = device
         self.half = half
@@ -325,7 +317,8 @@ class LoadCamera:  # for inference
         self.height = height
         self.width = width
         self.fps = fps
-        if self.source == "/dev/video0":
+        self.opencv_or_ffmpeg = opencv_or_ffmpeg
+        if self.opencv_or_ffmpeg == "opencv":
             self.cap = cv2.VideoCapture(self.source)  # video capture object
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)  # set buffer size
             self.cap.set(cv2.CAP_PROP_FPS, fps)
@@ -334,27 +327,25 @@ class LoadCamera:  # for inference
             import ffmpeg
 
             self.process = (
-                ffmpeg.input(self.source, format="decklink")
-                # .filter("fps", fps=60, round="up")
-                .output("pipe:", format="rawvideo", pix_fmt="rgb24").run_async(pipe_stdout=True)
+                ffmpeg.input(self.source, format="")
+                .output("pipe:", format="rawvideo", pix_fmt="bgr24")
+                .run_async(pipe_stdout=True)
             )
             in_bytes = self.process.stdout.read(self.height * self.width * 3)
-            in_frame = np.frombuffer(in_bytes, np.uint8).reshape([self.height, self.width, 3])
-            img0 = cv2.cvtColor(in_frame, cv2.COLOR_RGB2BGR)
+            img0 = np.frombuffer(in_bytes, np.uint8).reshape([self.height, self.width, 3])
         self.trajectory_init(img0)  # 落點
         self.model_choices = model_choices  # yolo or tracknet
         self.tracknet_image_list = None
 
     def read_frame_from_ffmpeg(self):
         in_bytes = self.process.stdout.read(self.height * self.width * 3)
-        in_frame = np.frombuffer(in_bytes, np.uint8).reshape([self.height, self.width, 3])
-        return cv2.cvtColor(in_frame, cv2.COLOR_RGB2BGR)
+        return np.frombuffer(in_bytes, np.uint8).reshape([self.height, self.width, 3])
 
     def __iter__(self):
         self.count = -1
         if self.model_choices == "tracknet" or self.model_choices == "tracknet_pytorch":
             for _ in range(12):
-                if self.source == "/dev/video0":
+                if self.opencv_or_ffmpeg == "opencv":
                     ret_val, img0 = self.cap.read()
                 else:
                     img0 = self.read_frame_from_ffmpeg()
@@ -388,7 +379,7 @@ class LoadCamera:  # for inference
         self.count += 1
 
         # Read frame
-        if self.source == "/dev/video0":
+        if self.opencv_or_ffmpeg == "opencv":
             ret_val, img0 = self.cap.read()
         else:
             img0 = self.read_frame_from_ffmpeg()
