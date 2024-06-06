@@ -6,33 +6,29 @@ from pathlib import Path
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
+from numpy import random
+
 from keypoints_detection import KeyPointDetection
 from models.experimental import attempt_load
-from numpy import random
 from process_videos import ProcessVideos
 from utils.datasets import LoadCamera, LoadImages, LoadStreams
-from utils.general import (apply_classifier, check_img_size, check_imshow,
-                           check_requirements, increment_path,
-                           non_max_suppression, scale_coords, set_logging,
-                           strip_optimizer, xyxy2xywh)
+from utils.general import (
+    apply_classifier,
+    check_img_size,
+    check_imshow,
+    check_requirements,
+    increment_path,
+    non_max_suppression,
+    scale_coords,
+    set_logging,
+    strip_optimizer,
+    xyxy2xywh,
+)
 from utils.plots import plot_one_box
-from utils.torch_utils import (TracedModel, load_classifier, select_device,
-                               time_synchronized)
+from utils.torch_utils import TracedModel, load_classifier, select_device, time_synchronized
 
 
 class YoloV7:
-    def max_width_n_max_height(self, width, height, targ_size=360):
-        if min(width, height) <= targ_size:
-            new_width, new_height = width, height
-        else:
-            if height > width:
-                new_width = targ_size
-                new_height = int(round(new_width * height / width / 2) * 2)
-            else:
-                new_height = targ_size
-                new_width = int(round(new_height * width / height / 2) * 2)
-        return new_width, new_height
-
     def detect(self, save_img=False, only_ball=False):
         source, weights, view_img, save_txt, imgsz, trace = (
             opt.source,
@@ -98,7 +94,7 @@ class YoloV7:
         names = model.module.names if hasattr(model, "module") else model.names
         # colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
         # colors = [[239,107,39],[125,209,71],[73,188,215]]
-        colors = [[158,66,3],[221,47,113],[86,104,193]] # 新聞記者的顏色
+        colors = [[158, 66, 3], [221, 47, 113], [86, 104, 193]]  # 新聞記者的顏色
 
         # Run inference
         if device.type != "cpu":
@@ -179,37 +175,39 @@ class YoloV7:
 
                         # 判斷boundaries
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        if cls == 0: # ball boundaries
+                        if cls == 0:  # ball boundaries
                             if opt.ball_top_boundary != "":
-                                numerator, denominator = map(int, opt.ball_top_boundary.split('/'))
-                                if xywh[1] < (numerator / denominator): # y軸在界線之上
+                                numerator, denominator = map(int, opt.ball_top_boundary.split("/"))
+                                if xywh[1] < (numerator / denominator):  # y軸在界線之上
                                     continue
                             if opt.ball_botton_boundary != "":
-                                numerator, denominator = map(int, opt.ball_botton_boundary.split('/'))
-                                if xywh[1] > (numerator / denominator): # y軸在界線之下
+                                numerator, denominator = map(int, opt.ball_botton_boundary.split("/"))
+                                if xywh[1] > (numerator / denominator):  # y軸在界線之下
                                     continue
-                        if cls  == 1: # person boundaries
-                            if opt.person_left_boundary  != "" and opt.person_right_boundary != "":
-                                left_numerator, left_denominator = map(int, opt.person_left_boundary.split('/'))
-                                right_numerator, right_denominator = map(int, opt.person_right_boundary.split('/'))
-                                if xywh[0] > (left_numerator / left_denominator) and xywh[0] < (right_numerator / right_denominator): # x軸在正中間的
+                        if cls == 1:  # person boundaries
+                            if opt.person_left_boundary != "" and opt.person_right_boundary != "":
+                                left_numerator, left_denominator = map(int, opt.person_left_boundary.split("/"))
+                                right_numerator, right_denominator = map(int, opt.person_right_boundary.split("/"))
+                                if xywh[0] > (left_numerator / left_denominator) and xywh[0] < (
+                                    right_numerator / right_denominator
+                                ):  # x軸在正中間的
                                     continue
                             if opt.person_top_boundary != "":
-                                numerator, denominator = map(int, opt.person_top_boundary.split('/'))
-                                if xywh[1] < (numerator / denominator): # y軸在界線之上
+                                numerator, denominator = map(int, opt.person_top_boundary.split("/"))
+                                if xywh[1] < (numerator / denominator):  # y軸在界線之上
                                     continue
                             if opt.person_botton_boundary != "":
-                                numerator, denominator = map(int, opt.person_botton_boundary.split('/'))
-                                if xywh[1] > (numerator / denominator): # y軸在界線之下
+                                numerator, denominator = map(int, opt.person_botton_boundary.split("/"))
+                                if xywh[1] > (numerator / denominator):  # y軸在界線之下
                                     continue
-                        if cls == 2: # table boundaries
+                        if cls == 2:  # table boundaries
                             if opt.table_top_boundary != "":
-                                numerator, denominator = map(int, opt.table_top_boundary.split('/'))
-                                if xywh[1] < (numerator / denominator): # y軸在界線之上
+                                numerator, denominator = map(int, opt.table_top_boundary.split("/"))
+                                if xywh[1] < (numerator / denominator):  # y軸在界線之上
                                     continue
                             if opt.table_botton_boundary != "":
-                                numerator, denominator = map(int, opt.table_botton_boundary.split('/'))
-                                if xywh[1] > (numerator / denominator): # y軸在界線之下
+                                numerator, denominator = map(int, opt.table_botton_boundary.split("/"))
+                                if xywh[1] > (numerator / denominator):  # y軸在界線之下
                                     continue
 
                         if opt.only_one_ball:
@@ -220,7 +218,9 @@ class YoloV7:
 
                         if save_txt:  # Write to file
                             if not opt.only_one_ball or int(cls) != 0:
-                                xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                                xywh = (
+                                    (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()
+                                )  # normalized xywh
                                 line = (cls, *xywh, conf) if opt.save_conf else (cls, *xywh)  # label format
                                 with open(txt_path + ".txt", "a") as f:
                                     f.write(("%g " * len(line)).rstrip() % line + "\n")
@@ -231,16 +231,24 @@ class YoloV7:
                                 plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
 
                     # 紀錄出信心最高的那一顆球
-                    if opt.only_one_ball and save_txt and most_confidence != -1 and most_confidence_ball_xyxy != None:  # Add bbox to image
-                        xywh = (xyxy2xywh(torch.tensor(most_confidence_ball_xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                    if (
+                        opt.only_one_ball and save_txt and most_confidence != -1 and most_confidence_ball_xyxy != None
+                    ):  # Add bbox to image
+                        xywh = (
+                            (xyxy2xywh(torch.tensor(most_confidence_ball_xyxy).view(1, 4)) / gn).view(-1).tolist()
+                        )  # normalized xywh
                         line = (int(0), *xywh, most_confidence) if opt.save_conf else (int(0), *xywh)  # label format
                         with open(txt_path + ".txt", "a") as f:
                             f.write(("%g " * len(line)).rstrip() % line + "\n")
 
                     # 指畫出信心最高的那一顆球
-                    if opt.only_one_ball and most_confidence != -1 and most_confidence_ball_xyxy != None:  # Add bbox to image
+                    if (
+                        opt.only_one_ball and most_confidence != -1 and most_confidence_ball_xyxy != None
+                    ):  # Add bbox to image
                         label = f"{names[int(0)]} {most_confidence:.2f}"
-                        plot_one_box(most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=1)
+                        plot_one_box(
+                            most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=1
+                        )
 
                 # Print time (inference + NMS)
                 print(f"{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS")

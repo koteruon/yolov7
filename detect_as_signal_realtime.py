@@ -63,18 +63,6 @@ class YoloV7:
             )
         return x_c_pred, y_c_pred
 
-    def max_width_n_max_height(self, width, height, targ_size=360):
-        if min(width, height) <= targ_size:
-            new_width, new_height = width, height
-        else:
-            if height > width:
-                new_width = targ_size
-                new_height = int(round(new_width * height / width / 2) * 2)
-            else:
-                new_height = targ_size
-                new_width = int(round(new_height * width / height / 2) * 2)
-        return new_width, new_height
-
     def detect(self, only_ball=False):
         source, weights, view_img, save_txt, imgsz, trace = (
             opt.source,
