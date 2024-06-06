@@ -3,20 +3,29 @@ import json
 import os
 import sys
 import time
+from types import SimpleNamespace
 
 import cv2
 import numpy as np
 import torch
 from torchvision import transforms
 from tqdm import tqdm
+
 from utils.datasets import letterbox
-from utils.general import non_max_suppression_kpt
+from utils.general import bbox_iou, non_max_suppression_kpt
 from utils.plots import output_to_keypoint
 
 
 class KeyPointDetection:
-    def __init__(self, is_train=False, process_videos=None, args = None):
-        self.args = args
+    def __init__(self, is_train=False, process_videos=None, args=None):
+        if args:
+            self.args = args
+        else:
+            self.args = SimpleNamespace()
+            self.args.person_left_boundary == ""
+            self.args.person_right_boundary == ""
+            self.args.person_top_boundary == ""
+            self.args.person_botton_boundary == ""
 
         # 輸出的結果
         self.all_outputs = {}
@@ -31,14 +40,31 @@ class KeyPointDetection:
 
         # 輸出檔案位置
         if is_train:
-            self.root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/keyframes/train/"
-            self.json_path = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_train_person_bbox_kpts.json"
+            self.root = r"../HIT/data/table_tennis/keyframes/train/"
+            self.json_path = r"../HIT/data/table_tennis/annotations/table_tennis_train_person_bbox_kpts.json"
+            self.person_bbox_path = r"../HIT/data/table_tennis/boxes/table_tennis_train_det_person_bbox.json"
         else:
-            self.root = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/keyframes/test/"
-            self.json_path = r"/home/chaoen/yoloNhit_calvin/HIT/data/table_tennis/annotations/table_tennis_test_person_bbox_kpts.json"
+            self.root = r"../HIT/data/table_tennis/keyframes/test/"
+            self.json_path = r"../HIT/data/table_tennis/annotations/table_tennis_test_person_bbox_kpts.json"
+            self.person_bbox_path = r"../HIT/data/table_tennis/boxes/table_tennis_test_det_person_bbox.json"
 
-        self.frame_span = 60
         self.process_videos = process_videos
+
+        self.pose_bbox_threshold = 0.30
+        if os.path.exists(self.person_bbox_path):
+            self.person_bbox = {}
+            with open(self.person_bbox_path, "r") as file:
+                data = json.load(file)
+                for entry in data:
+                    video_id = entry["video_id"]
+                    image_id = entry["image_id"]
+                    if video_id not in self.person_bbox:
+                        self.person_bbox[video_id] = {}
+                    if image_id not in self.person_bbox[video_id]:
+                        self.person_bbox[video_id][image_id] = []
+                    self.person_bbox[video_id][image_id].append(entry)
+        else:
+            self.person_bbox = None
 
     def detect_one(self, timestamp, root_idx=0, root_dir="M-4"):
         im = cv2.imread(os.path.join(self.root, root_dir, "{}.jpg".format(timestamp)))
@@ -69,17 +95,19 @@ class KeyPointDetection:
         for idx in range(output.shape[0]):
             # 去除x軸在中間的裁判
             if self.args.person_left_boundary != "" and self.args.person_right_boundary != "":
-                left_numerator, left_denominator = map(int, self.args.person_left_boundary.split('/'))
-                right_numerator, right_denominator = map(int, self.args.person_right_boundary.split('/'))
-                if output[idx, 2] >= 960 * (left_numerator / left_denominator) and output[idx, 2] <= 960 * (right_numerator / right_denominator):
+                left_numerator, left_denominator = map(int, self.args.person_left_boundary.split("/"))
+                right_numerator, right_denominator = map(int, self.args.person_right_boundary.split("/"))
+                if output[idx, 2] >= 960 * (left_numerator / left_denominator) and output[idx, 2] <= 960 * (
+                    right_numerator / right_denominator
+                ):
                     continue
             if self.args.person_top_boundary != "":
-                numerator, denominator = map(int, self.args.person_top_boundary.split('/'))
-                if output[idx, 3] < 576 * (numerator / denominator): # y軸在界線之上
+                numerator, denominator = map(int, self.args.person_top_boundary.split("/"))
+                if output[idx, 3] < 576 * (numerator / denominator):  # y軸在界線之上
                     continue
             if self.args.person_botton_boundary != "":
-                numerator, denominator = map(int, self.args.person_botton_boundary.split('/'))
-                if output[idx, 3] > 576 * (numerator / denominator): # y軸在界線之下
+                numerator, denominator = map(int, self.args.person_botton_boundary.split("/"))
+                if output[idx, 3] > 576 * (numerator / denominator):  # y軸在界線之下
                     continue
 
             category_id = int(output[idx][1])  ## cls
@@ -87,6 +115,14 @@ class KeyPointDetection:
             bbox = output[idx][2:6]
             bbox[0::2] = bbox[0::2] * w_ratio
             bbox[1::2] = bbox[1::2] * h_ratio
+
+            if self.person_bbox and root_dir in self.person_bbox and int(timestamp) in self.person_bbox[root_dir]:
+                bbox_frames = self.person_bbox[root_dir][int(timestamp)]
+                pose_bbox = torch.tensor(bbox)
+                target_bbox = torch.tensor([bbox_frame["bbox"] for bbox_frame in bbox_frames])
+                iou = bbox_iou(pose_bbox, target_bbox, x1y1x2y2=True, CIoU=True)
+                if torch.all(iou < self.pose_bbox_threshold):
+                    continue
 
             keypoints = output[idx][7:]
             keypoints[0::3] = keypoints[0::3] * w_ratio
@@ -112,8 +148,9 @@ class KeyPointDetection:
             for root_idx, root_dir in enumerate(root_path):
                 if timestamp is not None:
                     # camera streaming
-                    right_span = self.frame_span // 2
-                    left_span = self.frame_span - right_span
+                    frame_span = 60
+                    right_span = frame_span // 2
+                    left_span = frame_span - right_span
                     for x in range(int(timestamp) - left_span, int(timestamp) + right_span):
                         if self.process_videos.is_keyframe(x):
                             if os.path.exists(os.path.join(self.root, root_dir, "{}.jpg".format(x))):
