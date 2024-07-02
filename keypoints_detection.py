@@ -1,4 +1,5 @@
 import argparse
+import heapq
 import json
 import os
 import sys
@@ -50,7 +51,7 @@ class KeyPointDetection:
 
         self.process_videos = process_videos
 
-        self.pose_bbox_threshold = 0.30
+        self.pose_bbox_threshold = 0.25
         if os.path.exists(self.person_bbox_path):
             self.person_bbox = {}
             with open(self.person_bbox_path, "r") as file:
@@ -92,6 +93,16 @@ class KeyPointDetection:
         h_ratio = origin_height / yolo_height
         w_ratio = origin_width / yolo_width
 
+
+        if self.person_bbox and root_dir in self.person_bbox and int(timestamp) in self.person_bbox[root_dir]:
+            bbox_frames = self.person_bbox[root_dir][int(timestamp)]
+            target_bbox = torch.tensor([bbox_frame["bbox"] for bbox_frame in bbox_frames])
+            number_of_person = len(target_bbox)
+        else:
+            target_bbox = torch.tensor([])
+            number_of_person = 0
+
+        coco_outputs = []
         for idx in range(output.shape[0]):
             # 去除x軸在中間的裁判
             if self.args.person_left_boundary != "" and self.args.person_right_boundary != "":
@@ -116,30 +127,35 @@ class KeyPointDetection:
             bbox[0::2] = bbox[0::2] * w_ratio
             bbox[1::2] = bbox[1::2] * h_ratio
 
-            if self.person_bbox and root_dir in self.person_bbox and int(timestamp) in self.person_bbox[root_dir]:
-                bbox_frames = self.person_bbox[root_dir][int(timestamp)]
+            if number_of_person > 0:
                 pose_bbox = torch.tensor(bbox)
-                target_bbox = torch.tensor([bbox_frame["bbox"] for bbox_frame in bbox_frames])
                 iou = bbox_iou(pose_bbox, target_bbox, x1y1x2y2=True, CIoU=True)
                 if torch.all(iou < self.pose_bbox_threshold):
                     continue
+                max_iou = iou.max()
+            else:
+                max_iou = 0.0
 
             keypoints = output[idx][7:]
             keypoints[0::3] = keypoints[0::3] * w_ratio
             keypoints[1::3] = keypoints[1::3] * h_ratio
 
             image_id = int("{}".format(timestamp)) + (100000 * root_idx)
-            coco_output = {
+            coco_outputs.append({
                 "image_id": image_id,
                 "category_id": 1 if category_id == 0 else category_id,
                 "bbox": bbox.tolist(),
                 "keypoints": keypoints.reshape(-1, 3).tolist(),
                 "score": float(output[idx][6]),
-            }
-            if image_id in self.all_outputs:
-                self.all_outputs[image_id].append(coco_output)
-            else:
-                self.all_outputs[image_id] = [coco_output]
+                "iou": max_iou
+            })
+
+        top_number_of_person_coco_output = heapq.nlargest(number_of_person, coco_outputs, key=lambda x: x.get("iou", float('-inf')))
+        for d in top_number_of_person_coco_output:
+            d.pop("iou", None)
+
+        if top_number_of_person_coco_output:
+            self.all_outputs[image_id] = top_number_of_person_coco_output
 
     def detect(self, timestamp=None):
         detect_outputs = {}
