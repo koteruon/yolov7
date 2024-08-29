@@ -67,6 +67,8 @@ class KeyPointDetection:
             self.person_bbox = None
 
     def detect_one(self, timestamp, root_idx=0, root_dir="M-4"):
+        if int(timestamp) > 100000:
+            raise Exception("timestamp greater than 100000")
         im = cv2.imread(os.path.join(self.root, root_dir, "{}.jpg".format(timestamp)))
         origin_height = im.shape[0]
         origin_width = im.shape[1]
