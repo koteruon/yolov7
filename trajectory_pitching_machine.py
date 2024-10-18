@@ -22,18 +22,18 @@ from tqdm import tqdm
 class Ball:
     def __init__(self, center, bbox_size, frame_number, color_bgr_255):
         self.ball_limit = 5  # 限制最多儲存多少歷史紀錄
-        self.trajectory_ball_limit = 9 # 限制最多儲存多少歷史紀錄用於推算軌跡落點
-        self.show_ball_limit = 12 # 限制最多儲存多少歷史紀錄用於畫畫用
-        self.bounce_ball_limit = 6 # 限制最多儲存多少歷史紀錄用於畫畫用
-        self.frame_limit = 30 # 限制相隔多少frame以後自動刪除
+        self.trajectory_ball_limit = 9  # 限制最多儲存多少歷史紀錄用於推算軌跡落點
+        self.show_ball_limit = 12  # 限制最多儲存多少歷史紀錄用於畫畫用
+        self.bounce_ball_limit = 6  # 限制最多儲存多少歷史紀錄用於畫畫用
+        self.frame_limit = 30  # 限制相隔多少frame以後自動刪除
         self.center_history = [np.array(center)]  # 初始化中心點歷史紀錄
-        self.trajectory_center_history = [np.array(center)] # 初始化中心點歷史紀錄用於推算軌跡落點
-        self.show_center_history = [np.array(center)] # 初始化中心點歷史紀錄用於畫畫用
-        self.bounce_center_history = [np.array((-1,-1))] # 初始化落下的位置用於畫畫用
+        self.trajectory_center_history = [np.array(center)]  # 初始化中心點歷史紀錄用於推算軌跡落點
+        self.show_center_history = [np.array(center)]  # 初始化中心點歷史紀錄用於畫畫用
+        self.bounce_center_history = [np.array((-1, -1))]  # 初始化落下的位置用於畫畫用
         self.direction_history = [np.array([0, 0])]  # 初始化運動方向歷史紀錄
         self.bbox_size_history = [bbox_size]  # 初始化BBOX大小歷史紀錄
         self.iou_history = [0]  # 初始化IOU歷史紀錄
-        self.score_history = [1.0] # 初始化分數歷史紀錄
+        self.score_history = [1.0]  # 初始化分數歷史紀錄
         self.has_bounced = False
         self.new_center = np.array(center)
         self.new_bbox_size = np.array(bbox_size)
@@ -99,7 +99,7 @@ class Ball:
         self.has_bounced = True
 
     # Sigmoid 函数映射
-    def sigmoid(self,x):
+    def sigmoid(self, x):
         return 1 / (1 + np.exp(-10 * (x - 0.5)))  # 调整参数以控制形状
 
     def calculate_weights(self, frame_width):
@@ -123,20 +123,21 @@ class Ball:
 
     def calculate_new_bbox(self, center, bbox_size):
         ball_bbox = [
-                    center[0] - bbox_size[0] / 2,
-                    center[1] - bbox_size[1] / 2,
-                    center[0] + bbox_size[0] / 2,
-                    center[1] + bbox_size[1] / 2
-                ]
+            center[0] - bbox_size[0] / 2,
+            center[1] - bbox_size[1] / 2,
+            center[0] + bbox_size[0] / 2,
+            center[1] + bbox_size[1] / 2,
+        ]
         return ball_bbox
+
 
 class BallTracker:
     def __init__(self):
         self.balls = []  # 儲存所有球的資訊
-        self.balls_history = [] # 儲存歷史所有球的資訊
+        self.balls_history = []  # 儲存歷史所有球的資訊
         self.ball_count = 0
-        self.colormap = plt.get_cmap('Paired')  # 选择一个 colormap
-        self.score_threshold = 0.5 # 分數筏值
+        self.colormap = plt.get_cmap("Paired")  # 选择一个 colormap
+        self.score_threshold = 0.5  # 分數筏值
 
     def get_dynamic_color_bgr_255(self, index):
         num_colors = self.colormap.N
@@ -146,7 +147,7 @@ class BallTracker:
         color_bgr_255 = (color_bgr * 255).astype(np.uint8)
         return color_bgr_255
 
-    def set_frame_info(self,frame_width, frame_height):
+    def set_frame_info(self, frame_width, frame_height):
         self.frame_width = frame_width
         self.frame_height = frame_height
 
@@ -165,21 +166,17 @@ class BallTracker:
     def yolo2ball(self, bbox):
         # 提取 YOLO 格式的數據
         _, x_center, y_center, width, height, _ = bbox
-        ball_x_center, ball_y_center = int(float(x_center) * self.frame_width), int(
-            float(y_center) * self.frame_height
-        )
-        ball_width, ball_height = int(float(width) * self.frame_width), int(
-            float(height) * self.frame_height
-        )
+        ball_x_center, ball_y_center = int(float(x_center) * self.frame_width), int(float(y_center) * self.frame_height)
+        ball_width, ball_height = int(float(width) * self.frame_width), int(float(height) * self.frame_height)
         center = (ball_x_center, ball_y_center)
         bbox_size = (ball_width, ball_height)
 
         ball_bbox = [
-                center[0] - bbox_size[0] / 2,
-                center[1] - bbox_size[1] / 2,
-                center[0] + bbox_size[0] / 2,
-                center[1] + bbox_size[1] / 2
-            ]
+            center[0] - bbox_size[0] / 2,
+            center[1] - bbox_size[1] / 2,
+            center[0] + bbox_size[0] / 2,
+            center[1] + bbox_size[1] / 2,
+        ]
 
         return center, bbox_size, ball_bbox
 
@@ -204,8 +201,12 @@ class BallTracker:
                 iou = self.calculate_logistic_iou(ball.new_bbox, ball_bbox)
 
                 # 計算方向性
-                direction_similarity = np.dot(ball.average_direction, (center - ball.average_center)) / (
-                    np.linalg.norm(ball.average_direction) * np.linalg.norm(center - ball.average_center)) if np.linalg.norm(ball.average_direction) != 0 else 0
+                direction_similarity = (
+                    np.dot(ball.average_direction, (center - ball.average_center))
+                    / (np.linalg.norm(ball.average_direction) * np.linalg.norm(center - ball.average_center))
+                    if np.linalg.norm(ball.average_direction) != 0
+                    else 0
+                )
                 direction_similarity = max(-1, min(1, direction_similarity))  # 保證方向相似度在 [0, 1] 範圍內
 
                 # 計算長寬比差異
@@ -213,24 +214,29 @@ class BallTracker:
                 aspect_ratio_new = bbox_size[0] / bbox_size[1]
                 aspect_ratio_diff = abs(aspect_ratio_ball - aspect_ratio_new)
 
-
                 # 設定垂直距離和水平距離的權重
                 vertical_weight = 0.7  # 更在意垂直距離
                 horizontal_weight = 0.3  # 水平距離次要
                 # 計算距離
-                weighted_diff = np.array([
-                    horizontal_weight * (ball.average_center[0] - center[0]),  # 水平方向加權
-                    vertical_weight * (ball.average_center[1] - center[1])     # 垂直方向加權
-                ])
+                weighted_diff = np.array(
+                    [
+                        horizontal_weight * (ball.average_center[0] - center[0]),  # 水平方向加權
+                        vertical_weight * (ball.average_center[1] - center[1]),  # 垂直方向加權
+                    ]
+                )
                 distance = np.linalg.norm(weighted_diff)
-                weighted_diff = np.array([
-                    horizontal_weight * self.frame_width,  # 水平方向加權
-                    vertical_weight * self.frame_height     # 垂直方向加權
-                ])
+                weighted_diff = np.array(
+                    [
+                        horizontal_weight * self.frame_width,  # 水平方向加權
+                        vertical_weight * self.frame_height,  # 垂直方向加權
+                    ]
+                )
                 max_distance = np.linalg.norm(weighted_diff) / 4
 
                 # 獲取權重
-                iou_weight, direction_weight, distance_weight, aspect_ratio_weight = ball.calculate_weights(self.frame_width)
+                iou_weight, direction_weight, distance_weight, aspect_ratio_weight = ball.calculate_weights(
+                    self.frame_width
+                )
 
                 # 計算各個因素的分數
                 iou_score = iou  # IOU 越大分數越高
@@ -246,10 +252,12 @@ class BallTracker:
                 aspect_ratio_score = 1 - aspect_ratio_normalized  # 差異越小分數越高，範圍 [0, 1]
 
                 # 綜合得分公式：根據各個因素的分數和權重進行加權平均
-                score = (iou_score * iou_weight +
-                         direction_score * direction_weight +
-                         distance_score * distance_weight +
-                         aspect_ratio_score * aspect_ratio_weight)
+                score = (
+                    iou_score * iou_weight
+                    + direction_score * direction_weight
+                    + distance_score * distance_weight
+                    + aspect_ratio_score * aspect_ratio_weight
+                )
 
                 # if frame_number >= 3497:
                 #     print("test")
@@ -279,8 +287,8 @@ class BallTracker:
                 self.add_ball(center, bbox_size, frame_number)
 
     def calculate_center(self, bbox):
-        x_center = (bbox[1])  # 使用 YOLO 的 x_center
-        y_center = (bbox[2])  # 使用 YOLO 的 y_center
+        x_center = bbox[1]  # 使用 YOLO 的 x_center
+        y_center = bbox[2]  # 使用 YOLO 的 y_center
         return (x_center, y_center)
 
     def calculate_logistic_iou(self, bbox1, bbox2, alpha=10, beta=0.3):
@@ -925,15 +933,15 @@ class Trajectory:
                 ] = self.img_opt
 
         cv2.putText(
-                image_CV,
-                f"Frame : {self.count}",
-                (10, 40),
-                cv2.FONT_HERSHEY_TRIPLEX,
-                1,
-                (0, 255, 255),
-                1,
-                cv2.LINE_AA,
-            )
+            image_CV,
+            f"Frame : {self.count}",
+            (10, 40),
+            cv2.FONT_HERSHEY_TRIPLEX,
+            1,
+            (0, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
 
         # for idx, ball in enumerate(self.ball_tracker.balls, 1):
         #     cv2.putText(
@@ -988,7 +996,7 @@ class Trajectory:
         self.WIDTH = 512
 
         # 影片跟目錄
-        root_path = f"./runs/detect/pitching_machine_20241015"
+        root_path = f"./runs/detect/pitching_machine_20241019"
         video_fullname = "C0086.MP4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
