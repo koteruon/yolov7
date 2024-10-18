@@ -14,27 +14,31 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.linalg as LA
 import pandas as pd
+from matplotlib.colors import to_rgb
 from scipy.optimize import leastsq
 from tqdm import tqdm
 
 
 class Ball:
-    def __init__(self, center, bbox_size, frame_number):
+    def __init__(self, center, bbox_size, frame_number, color_bgr_255):
         self.ball_limit = 5  # 限制最多儲存多少歷史紀錄
         self.trajectory_ball_limit = 9 # 限制最多儲存多少歷史紀錄用於推算軌跡落點
         self.show_ball_limit = 12 # 限制最多儲存多少歷史紀錄用於畫畫用
+        self.bounce_ball_limit = 6 # 限制最多儲存多少歷史紀錄用於畫畫用
         self.frame_limit = 30 # 限制相隔多少frame以後自動刪除
         self.center_history = [np.array(center)]  # 初始化中心點歷史紀錄
         self.trajectory_center_history = [np.array(center)] # 初始化中心點歷史紀錄用於推算軌跡落點
         self.show_center_history = [np.array(center)] # 初始化中心點歷史紀錄用於畫畫用
+        self.bounce_center_history = [np.array((-1,-1))] # 初始化落下的位置用於畫畫用
         self.direction_history = [np.array([0, 0])]  # 初始化運動方向歷史紀錄
         self.bbox_size_history = [bbox_size]  # 初始化BBOX大小歷史紀錄
         self.iou_history = [0]  # 初始化IOU歷史紀錄
-        self.score_history = [0] # 初始化分數歷史紀錄
+        self.score_history = [1.0] # 初始化分數歷史紀錄
         self.has_bounced = False
         self.new_center = np.array(center)
         self.new_bbox_size = np.array(bbox_size)
         self.new_frame_number = frame_number
+        self.color_bgr_255 = color_bgr_255
 
         # 初始化平均值
         self.average_center = np.array(center)
@@ -47,6 +51,7 @@ class Ball:
         center = (-1, -1)
         self._update_history(self.trajectory_ball_limit, self.trajectory_center_history, center)
         self._update_history(self.show_ball_limit, self.show_center_history, center)
+        self._update_history(self.bounce_ball_limit, self.bounce_center_history, center)
 
     def update_position(self, new_center, new_bbox_size, new_frame_number, iou, score):
         self.new_center = np.array(new_center)
@@ -58,10 +63,11 @@ class Ball:
         self._update_history(self.ball_limit, self.center_history, self.new_center)
         self._update_history(self.trajectory_ball_limit, self.trajectory_center_history, self.new_center)
         self._update_history(self.show_ball_limit, self.show_center_history, self.new_center)
+        self._update_history(self.bounce_ball_limit, self.bounce_center_history, (-1, -1))
         self._update_history(self.ball_limit, self.direction_history, new_direction)
         self._update_history(self.ball_limit, self.bbox_size_history, self.new_bbox_size)
         self._update_history(self.ball_limit, self.iou_history, iou)  # 更新 IOU 歷史紀錄
-        self._update_history(sys.maxint, self.score_history, score)  # 更新 IOU 歷史紀錄
+        self._update_history(sys.maxsize, self.score_history, score)  # 更新 IOU 歷史紀錄
 
         # 計算並儲存最新的平均值
         self.average_center = self.get_average_position()
@@ -88,22 +94,22 @@ class Ball:
     def get_average_iou(self):
         return np.mean(self.iou_history)
 
-    def bounce(self):
+    def bounce(self, bounce_center):
+        self._update_history(self.bounce_ball_limit, self.bounce_center_history, bounce_center)
         self.has_bounced = True
 
     # Sigmoid 函数映射
     def sigmoid(self,x):
-        return 1 / (1 + np.exp(-5 * (x - 0.5)))  # 调整参数以控制形状
+        return 1 / (1 + np.exp(-10 * (x - 0.5)))  # 调整参数以控制形状
 
     def calculate_weights(self, frame_width):
         # 計算權重
         historical_iou = self.get_average_iou()
-        iou_weight = max(self.sigmoid(historical_iou), 0.7)  # IOU 的權重
+        iou_weight = self.sigmoid(historical_iou)  # IOU 的權重
         x_position_ratio = self.average_center[0] / frame_width  # 球在畫面中的x位置比率 [0, 1]
-        distance_weight = 0.2 + x_position_ratio * 0.5  # 離右邊越近，距離權重越高
-        direction_weight = 0.05 + x_position_ratio * 0.65  # 離右邊越近，方向權重越高
-        remaining_weight = 1.0 - (iou_weight  + distance_weight + direction_weight)
-        aspect_ratio_weight = max(0.3, remaining_weight)
+        distance_weight = 0.45 + x_position_ratio * 0.25  # 離右邊越近，距離權重越高
+        direction_weight = max(0.0, -0.2 + x_position_ratio * 0.9)  # 離右邊越近，方向權重越高
+        aspect_ratio_weight = 0.25 + x_position_ratio * 0.25  # 離右邊越近，距離權重越高
         total_weight = iou_weight + direction_weight + distance_weight + aspect_ratio_weight
 
         # 標準化權重
@@ -128,13 +134,26 @@ class BallTracker:
     def __init__(self):
         self.balls = []  # 儲存所有球的資訊
         self.balls_history = [] # 儲存歷史所有球的資訊
+        self.ball_count = 0
+        self.colormap = plt.get_cmap('Paired')  # 选择一个 colormap
+        self.score_threshold = 0.5 # 分數筏值
+
+    def get_dynamic_color_bgr_255(self, index):
+        num_colors = self.colormap.N
+        color = self.colormap(index % num_colors)
+        color_rgb = to_rgb(color)
+        color_bgr = np.array(color_rgb)[::-1]
+        color_bgr_255 = (color_bgr * 255).astype(np.uint8)
+        return color_bgr_255
 
     def set_frame_info(self,frame_width, frame_height):
         self.frame_width = frame_width
         self.frame_height = frame_height
 
     def add_ball(self, center, bbox_size, frame_number):
-        new_ball = Ball(center, bbox_size, frame_number)
+        self.ball_count += 1
+        color_bgr_255 = self.get_dynamic_color_bgr_255(self.ball_count)
+        new_ball = Ball(center, bbox_size, frame_number, color_bgr_255)
         self.balls.append(new_ball)
 
     def remove_non_tracking_ball(self, frame_number):
@@ -182,20 +201,33 @@ class BallTracker:
             has_match = False
             for ball in self.balls:
                 # 計算 IOU
-                iou = self.calculate_iou(ball.new_bbox, ball_bbox)
+                iou = self.calculate_logistic_iou(ball.new_bbox, ball_bbox)
 
                 # 計算方向性
                 direction_similarity = np.dot(ball.average_direction, (center - ball.average_center)) / (
-                    np.linalg.norm(ball.average_direction) * np.linalg.norm(center - ball.average_center)) if np.linalg.norm(ball.average_direction) > 0 else 0
-                direction_similarity = max(0, min(1, direction_similarity))  # 保證方向相似度在 [0, 1] 範圍內
+                    np.linalg.norm(ball.average_direction) * np.linalg.norm(center - ball.average_center)) if np.linalg.norm(ball.average_direction) != 0 else 0
+                direction_similarity = max(-1, min(1, direction_similarity))  # 保證方向相似度在 [0, 1] 範圍內
 
                 # 計算長寬比差異
                 aspect_ratio_ball = ball.average_bbox_size[0] / ball.average_bbox_size[1]
                 aspect_ratio_new = bbox_size[0] / bbox_size[1]
                 aspect_ratio_diff = abs(aspect_ratio_ball - aspect_ratio_new)
 
+
+                # 設定垂直距離和水平距離的權重
+                vertical_weight = 0.7  # 更在意垂直距離
+                horizontal_weight = 0.3  # 水平距離次要
                 # 計算距離
-                distance = np.linalg.norm(ball.average_center - center)
+                weighted_diff = np.array([
+                    horizontal_weight * (ball.average_center[0] - center[0]),  # 水平方向加權
+                    vertical_weight * (ball.average_center[1] - center[1])     # 垂直方向加權
+                ])
+                distance = np.linalg.norm(weighted_diff)
+                weighted_diff = np.array([
+                    horizontal_weight * self.frame_width,  # 水平方向加權
+                    vertical_weight * self.frame_height     # 垂直方向加權
+                ])
+                max_distance = np.linalg.norm(weighted_diff) / 4
 
                 # 獲取權重
                 iou_weight, direction_weight, distance_weight, aspect_ratio_weight = ball.calculate_weights(self.frame_width)
@@ -204,7 +236,7 @@ class BallTracker:
                 iou_score = iou  # IOU 越大分數越高
                 direction_score = direction_similarity  # 方向性越相似分數越高
                 # 規範化距離分數
-                max_distance = self.frame_width  # 假設最大可能的距離等於畫面寬度
+
                 distance_normalized = min(distance / max_distance, 1)  # 將距離規範化到 [0, 1]
                 distance_score = 1 - distance_normalized  # 距離越小分數越高，範圍 [0, 1]
 
@@ -219,8 +251,12 @@ class BallTracker:
                          distance_score * distance_weight +
                          aspect_ratio_score * aspect_ratio_weight)
 
-                # 儲存所有配對的分數
-                all_scores.append((score, ball, center, bbox_size, iou))
+                # if frame_number >= 3497:
+                #     print("test")
+
+                if score > self.score_threshold:
+                    # 儲存所有配對的分數
+                    all_scores.append((score, ball, center, bbox_size, iou))
 
         # 按照得分排序，得分越高越好
         all_scores.sort(reverse=True, key=lambda x: x[0])
@@ -247,7 +283,7 @@ class BallTracker:
         y_center = (bbox[2])  # 使用 YOLO 的 y_center
         return (x_center, y_center)
 
-    def calculate_iou(self, bbox1, bbox2):
+    def calculate_logistic_iou(self, bbox1, bbox2, alpha=10, beta=0.3):
         x1_max = max(bbox1[0], bbox2[0])
         y1_max = max(bbox1[1], bbox2[1])
         x2_min = min(bbox1[2], bbox2[2])
@@ -258,7 +294,9 @@ class BallTracker:
         bbox2_area = (bbox2[2] - bbox2[0]) * (bbox2[3] - bbox2[1])
         union_area = bbox1_area + bbox2_area - inter_area
 
-        return inter_area / union_area if union_area > 0 else 0
+        iou = inter_area / union_area if union_area > 0 else 0
+        logistic_iou = 1 / (1 + np.exp(-alpha * (iou - beta)))
+        return logistic_iou
 
 
 class Trajectory:
@@ -541,56 +579,6 @@ class Trajectory:
             self.img_opt_bounce_location,
         )
 
-    def Draw_SpeedHist(self, save=True, show=False):
-        # 繪製速度直方圖
-        stroke_length = 0
-        # 平衡左右 list ??
-        if len(self.left_speed_list) > len(self.right_speed_list):
-            stroke_length = len(self.left_speed_list)
-            for i in range(len(self.left_speed_list) - len(self.right_speed_list)):
-                self.right_speed_list.append(0)
-        else:
-            stroke_length = len(self.right_speed_list)
-            for i in range(len(self.right_speed_list) - len(self.left_speed_list)):
-                self.left_speed_list.append(0)
-
-        shots_list = np.arange(1, stroke_length + 1)
-
-        label_left = f"left_player mean:{str(round(np.mean(self.left_speed_list),2))}"
-        label_right = f"right_player mean:{str(round(np.mean(self.right_speed_list),2))}"
-        plt.figure(figsize=(15, 10), dpi=100, linewidth=2)
-        plt.plot(shots_list, self.left_speed_list, "s-", color="royalblue", label=label_left)
-        plt.plot(shots_list, self.right_speed_list, "o-", color="darkorange", label=label_right)
-        plt.title(f"Comparing the shot speed between the two players", x=0.5, y=1.03, fontsize=20)
-        plt.xticks(fontsize=20)
-        plt.yticks(fontsize=20)
-        plt.xlabel(f"shots", fontsize=30, labelpad=15)
-        plt.ylabel(f"Km/hr", fontsize=30, labelpad=20)
-        plt.legend(loc="best", fontsize=20)
-        if save:
-            plt.savefig(os.path.join(self.speedhis_path, f"{self.video_name}_shot_speedhis.png"))
-        if show:
-            fig = plt.gcf()
-            fig.canvas.draw()
-            fig_img = np.array(fig.canvas.renderer.buffer_rgba())
-            cv2.imshow(self.speedhis_title, cv2.cvtColor(fig_img, cv2.COLOR_RGBA2BGR))
-        plt.clf()
-
-        plt.figure(figsize=(15, 10), dpi=100, linewidth=2)
-        plt.hist([self.left_speed_list, self.right_speed_list], bins="auto", alpha=1, label=["left", "right"])
-
-        plt.xlabel(f"Km/hr", fontsize=30, labelpad=15)
-        plt.ylabel(f"shots", fontsize=30, labelpad=20)
-        plt.legend(loc="upper right")
-        if save:
-            plt.savefig(os.path.join(self.speed_distribution_path, f"{self.video_name}_shot_speed_distribution.png"))
-        if show:
-            fig = plt.gcf()
-            fig.canvas.draw()
-            fig_img = np.array(fig.canvas.renderer.buffer_rgba())
-            cv2.imshow(self.speed_distribution_title, cv2.cvtColor(fig_img, cv2.COLOR_RGBA2BGR))
-        plt.clf()
-
     def Draw_MiniBoard(self, option=None):
         img_opt = np.zeros(
             [self.miniboard_height + self.miniboard_edge * 2, self.miniboard_width + self.miniboard_edge * 2, 3],
@@ -664,7 +652,6 @@ class Trajectory:
     def Draw_and_Collect_Data(
         self,
         color,
-        loc_PT,
     ):
         cv2.circle(self.img_opt, self.PT_dict[self.count], 5, color, 4)
         # add to bounce map
@@ -685,9 +672,6 @@ class Trajectory:
             self.Show_Bounce_Analysis()
         if self.is_show_bounce_location:
             self.Show_Bounce_Location()
-        p_inv = self.Perspective_Transform(self.inv, loc_PT)
-        self.q_bv.appendleft(p_inv)
-        self.q_bv.pop()
 
     def Create_Output_Dir(self, output_path, video_name):
         # 建立輸出檔案夾
@@ -792,8 +776,8 @@ class Trajectory:
         # 點選透視變形位置, 順序為:左上,左下,右下,右上
         PT_data = {"img": image.copy(), "point_x": [], "point_y": []}
         # TODO: 測試用
-        PT_data["point_x"] = [498, 162, 1907, 1565]
-        PT_data["point_y"] = [688, 828, 854, 692]
+        PT_data["point_x"] = [508, 163, 1905, 1555]
+        PT_data["point_y"] = [679, 827, 849, 686]
         # TODO 測試用
         # cv2.namedWindow("PIC2 (press Q to quit)", 0)
         # cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
@@ -886,7 +870,7 @@ class Trajectory:
                     fit = a * x_c_pred**2 + b * x_c_pred + c
                     # 差距 10 個 pixel 以上視為脫離預測的拋物線
                     if abs(y_c_pred - fit) >= 10:
-                        x_last = x_tmp[0]
+                        x_last = x_tmp[-2]
                         # 預測球在球桌上的落點, x_drop : 本次與前次的中點, y_drop : x_drop 於拋物線上的位置
                         x_drop = int(round((x_c_pred + x_last) / 2, 0))
                         y_drop = int(round(a * x_drop**2 + b * x_drop + c, 0))
@@ -904,41 +888,31 @@ class Trajectory:
                             self.PT_dict[self.count] = loc_PT
                             # 落點在左側
                             if self.PT_dict[self.count][0] <= int(self.miniboard_width / 2) + self.miniboard_edge:
-                                ball.has_bounced = True
+                                ball.bounce((x_drop, y_drop))
                                 self.Draw_and_Collect_Data(
                                     (0, 0, 255),
-                                    loc_PT,
                                 )
 
                             # 落點在右側
                             elif self.PT_dict[self.count][0] >= int(self.miniboard_width / 2) + self.miniboard_edge:
-                                ball.has_bounced = True
+                                ball.bounce((x_drop, y_drop))
                                 self.Draw_and_Collect_Data(
                                     (80, 127, 255),
-                                    loc_PT,
                                 )
 
         return image_CV
 
-    def Add_Ball_In_Queue(self):
-        self.q.appendleft(
-            (self.x_c_pred, self.y_c_pred) if self.x_c_pred != np.inf and self.y_c_pred != np.inf else (-1, -1)
-        )
-        self.q.pop()
-
-        self.q_bv.appendleft((-1, -1))
-        self.q_bv.pop()
-
     def Draw_On_Image(self, image_CV):
-        # draw current frame prediction and previous 11 frames as yellow circle, total: 12 frames
-        for i in range(12):
-            if self.q[i] != (-1, -1):
-                cv2.circle(image_CV, (self.q[i][0], self.q[i][1]), 5, (0, 255, 255), 1)
+        for ball in self.ball_tracker.balls:
+            # draw current frame prediction and previous 11 frames as yellow circle, total: 12 frames
+            for ball_center in ball.show_center_history:
+                if not np.array_equal(ball_center, np.array([-1, -1])):
+                    cv2.circle(image_CV, tuple(ball_center), 5, tuple(map(int, ball.color_bgr_255)), 1)
 
-        # draw bounce point as red circle
-        for i in range(6):
-            if self.q_bv[i] != (-1, -1):
-                cv2.circle(image_CV, (self.q_bv[i][0], self.q_bv[i][1]), 5, (0, 0, 255), 4)
+            # draw bounce point as red circle
+            for bounce_center in ball.bounce_center_history:
+                if not np.array_equal(bounce_center, np.array([-1, -1])):
+                    cv2.circle(image_CV, tuple(bounce_center), 5, (0, 0, 255), 4)
 
         # Place miniboard on upper right corner
         if self.is_show_bounce:
@@ -949,6 +923,29 @@ class Trajectory:
                     : self.miniboard_height + self.miniboard_edge * 2,
                     self.frame_width - (self.miniboard_width + self.miniboard_edge * 2) :,
                 ] = self.img_opt
+
+        cv2.putText(
+                image_CV,
+                f"Frame : {self.count}",
+                (10, 40),
+                cv2.FONT_HERSHEY_TRIPLEX,
+                1,
+                (0, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
+
+        # for idx, ball in enumerate(self.ball_tracker.balls, 1):
+        #     cv2.putText(
+        #         image_CV,
+        #         f"Score : {ball.score_history[-1]:.2f}",
+        #         (10, 40 + 40 * idx),
+        #         cv2.FONT_HERSHEY_TRIPLEX,
+        #         1,
+        #         tuple(map(int, ball.color_bgr_255)),
+        #         1,
+        #         cv2.LINE_AA,
+        #     )
 
         return image_CV
 
@@ -1030,27 +1027,10 @@ class Trajectory:
         # 透視變形
         self.PT_dict = {}
 
-        # In order to draw the trajectory of tennis, we need to save the coordinate of preious 12 frames
-        self.q = queue.deque([(-1, -1) for _ in range(12)])
-
-        # bounce detection init
-        self.q_bv = queue.deque([(-1, -1) for _ in range(6)])
-
         # 參數
-        self.left_speed_list, self.right_speed_list = [], []
         self.bounce_location_list = np.zeros((4, 3), dtype=int)
         self.bouncing_offset_x, self.bouncing_offset_y = 10, 15  # bouncing location offset
-        self.speed_left, self.speed_right = 0, 0  # 左右選手球速
-        self.bounce_frame_L, self.bounce_frame_R = -1, -1  # 出現落點的Frame
-        self.left_shot_count, self.right_shot_count = 0, 0  # 左右選手擊球時的frame number
-        self.hit_count = 0  # 擊球次數
         self.count = 1  # 記錄處理幾個 Frame
-        self.MAX_velo = 0  # 最大球速
-        self.x_c_pred, self.y_c_pred = np.inf, np.inf  # 球體中心位置
-        self.is_first_ball = True  # 每局第一球的時候frame只要5個，其他時間要9個
-        self.is_serve_wait = False
-        self.shotspeed = 0
-        self.shotspeed_previous = 0
 
         # 顯示參數
         self.is_show_bounce = True
@@ -1109,20 +1089,18 @@ class Trajectory:
         batch = 12
         n = 4
         k = batch // 2
-        while success:
-            label_file = os.path.join(self.label_path, f"{self.video_name}_{self.count}.txt")
-            if self.count == 568:
-                print("test")
-            self.Read_Yolo_Label_One_Frame(label_file=label_file)
-            image_CV = self.Detect_Trajectory(image)
-            self.Add_Ball_In_Queue()
-            image_CV = self.Draw_On_Image(image_CV)
-
-            self.Next_Count()
-            if self.count >= total_frames - 12:
-                break
-            output.write(image_CV)
-            success, image = cap.read()
+        with tqdm(total=total_frames, desc="Processing Frames") as pbar:
+            while success:
+                label_file = os.path.join(self.label_path, f"{self.video_name}_{self.count}.txt")
+                self.Read_Yolo_Label_One_Frame(label_file=label_file)
+                image_CV = self.Detect_Trajectory(image)
+                image_CV = self.Draw_On_Image(image_CV)
+                self.Next_Count()
+                if self.count >= total_frames - 12:
+                    break
+                output.write(image_CV)
+                pbar.update(1)
+                success, image = cap.read()
 
         # For releasing cap and out.
         cap.release()
@@ -1137,9 +1115,6 @@ class Trajectory:
 
         # For saving bounce map.
         self.Save_Bounce_Location()
-
-        # For saving speedHist
-        self.Draw_SpeedHist()
 
         end = time.time()
         print(f"Write video time: {end-start} seconds.")
