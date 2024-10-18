@@ -30,6 +30,7 @@ class Ball:
         self.direction_history = [np.array([0, 0])]  # 初始化運動方向歷史紀錄
         self.bbox_size_history = [bbox_size]  # 初始化BBOX大小歷史紀錄
         self.iou_history = [0]  # 初始化IOU歷史紀錄
+        self.score_history = [0] # 初始化分數歷史紀錄
         self.has_bounced = False
         self.new_center = np.array(center)
         self.new_bbox_size = np.array(bbox_size)
@@ -47,7 +48,7 @@ class Ball:
         self._update_history(self.trajectory_ball_limit, self.trajectory_center_history, center)
         self._update_history(self.show_ball_limit, self.show_center_history, center)
 
-    def update_position(self, new_center, new_bbox_size, new_frame_number, iou):
+    def update_position(self, new_center, new_bbox_size, new_frame_number, iou, score):
         self.new_center = np.array(new_center)
         self.new_bbox_size = np.array(new_bbox_size)
         self.new_frame_number = new_frame_number
@@ -60,6 +61,7 @@ class Ball:
         self._update_history(self.ball_limit, self.direction_history, new_direction)
         self._update_history(self.ball_limit, self.bbox_size_history, self.new_bbox_size)
         self._update_history(self.ball_limit, self.iou_history, iou)  # 更新 IOU 歷史紀錄
+        self._update_history(sys.maxint, self.score_history, score)  # 更新 IOU 歷史紀錄
 
         # 計算並儲存最新的平均值
         self.average_center = self.get_average_position()
@@ -96,7 +98,7 @@ class Ball:
     def calculate_weights(self, frame_width):
         # 計算權重
         historical_iou = self.get_average_iou()
-        iou_weight = self.sigmoid(historical_iou)  # IOU 的權重
+        iou_weight = max(self.sigmoid(historical_iou), 0.7)  # IOU 的權重
         x_position_ratio = self.average_center[0] / frame_width  # 球在畫面中的x位置比率 [0, 1]
         distance_weight = 0.2 + x_position_ratio * 0.5  # 離右邊越近，距離權重越高
         direction_weight = 0.05 + x_position_ratio * 0.65  # 離右邊越近，方向權重越高
@@ -125,6 +127,7 @@ class Ball:
 class BallTracker:
     def __init__(self):
         self.balls = []  # 儲存所有球的資訊
+        self.balls_history = [] # 儲存歷史所有球的資訊
 
     def set_frame_info(self,frame_width, frame_height):
         self.frame_width = frame_width
@@ -137,6 +140,7 @@ class BallTracker:
     def remove_non_tracking_ball(self, frame_number):
         for ball in self.balls:
             if frame_number - ball.new_frame_number > ball.frame_limit:
+                self.balls_history.append(ball)
                 self.balls.remove(ball)
 
     def yolo2ball(self, bbox):
@@ -228,7 +232,7 @@ class BallTracker:
         for score, ball, center, bbox_size, iou in all_scores:
             if ball not in used_balls and (center, bbox_size) not in used_detections:
                 # 更新最佳球的狀態
-                ball.update_position(center, bbox_size, frame_number, iou)
+                ball.update_position(center, bbox_size, frame_number, iou, score)
                 used_balls.add(ball)  # 標記該球為已使用
                 used_detections.add((center, bbox_size))  # 標記該檢測框為已配對
 
