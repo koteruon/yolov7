@@ -35,6 +35,7 @@ class Ball:
         self.iou_history = [0]  # 初始化IOU歷史紀錄
         self.score_history = [1.0]  # 初始化分數歷史紀錄
         self.has_bounced = False
+        self.bounced_frame_number = -1
         self.new_center = np.array(center)
         self.new_bbox_size = np.array(bbox_size)
         self.new_frame_number = frame_number
@@ -46,6 +47,15 @@ class Ball:
         self.average_bbox_size = bbox_size
         self.average_iou = 0
         self.new_bbox = self.calculate_new_bbox(self.new_center, self.new_bbox_size)
+
+    def get_color_bgr_255(self, draw_ball_at_frame_number):
+        if isinstance(self.color_bgr_255, list):
+            if self.has_bounced and draw_ball_at_frame_number > self.bounced_frame_number:
+                return self.color_bgr_255[1]
+            else:
+                return self.color_bgr_255[0]
+        else:
+            return self.color_bgr_255
 
     def no_detect_update_position(self):
         center = (-1, -1)
@@ -94,9 +104,10 @@ class Ball:
     def get_average_iou(self):
         return np.mean(self.iou_history)
 
-    def bounce(self, bounce_center):
+    def bounce(self, bounce_center, frame_number):
         self._update_history(self.bounce_ball_limit, self.bounce_center_history, bounce_center)
         self.has_bounced = True
+        self.bounced_frame_number = frame_number
 
     # Sigmoid 函数映射
     def sigmoid(self, x):
@@ -140,11 +151,12 @@ class BallTracker:
         self.score_threshold = 0.5  # 分數筏值
 
     def get_dynamic_color_bgr_255(self, index):
-        num_colors = self.colormap.N
-        color = self.colormap(index % num_colors)
-        color_rgb = to_rgb(color)
-        color_bgr = np.array(color_rgb)[::-1]
-        color_bgr_255 = (color_bgr * 255).astype(np.uint8)
+        # num_colors = self.colormap.N
+        # color = self.colormap(index % num_colors)
+        # color_rgb = to_rgb(color)
+        # color_bgr = np.array(color_rgb)[::-1]
+        # color_bgr_255 = (color_bgr * 255).astype(np.uint8)
+        color_bgr_255 = [(0, 255, 255), (200, 200, 200)]
         return color_bgr_255
 
     def set_frame_info(self, frame_width, frame_height):
@@ -896,14 +908,14 @@ class Trajectory:
                             self.PT_dict[self.count] = loc_PT
                             # 落點在左側
                             if self.PT_dict[self.count][0] <= int(self.miniboard_width / 2) + self.miniboard_edge:
-                                ball.bounce((x_drop, y_drop))
+                                ball.bounce((x_drop, y_drop), self.count)
                                 self.Draw_and_Collect_Data(
                                     (0, 0, 255),
                                 )
 
                             # 落點在右側
                             elif self.PT_dict[self.count][0] >= int(self.miniboard_width / 2) + self.miniboard_edge:
-                                ball.bounce((x_drop, y_drop))
+                                ball.bounce((x_drop, y_drop), self.count)
                                 self.Draw_and_Collect_Data(
                                     (80, 127, 255),
                                 )
@@ -913,9 +925,10 @@ class Trajectory:
     def Draw_On_Image(self, image_CV):
         for ball in self.ball_tracker.balls:
             # draw current frame prediction and previous 11 frames as yellow circle, total: 12 frames
-            for ball_center in ball.show_center_history:
+            for privous_idx, ball_center in enumerate(reversed(ball.show_center_history)):
                 if not np.array_equal(ball_center, np.array([-1, -1])):
-                    cv2.circle(image_CV, tuple(ball_center), 5, tuple(map(int, ball.color_bgr_255)), 1)
+                    ball_color = ball.get_color_bgr_255(self.count - privous_idx)
+                    cv2.circle(image_CV, tuple(ball_center), 5, tuple(map(int, ball_color)), 1)
 
             # draw bounce point as red circle
             for bounce_center in ball.bounce_center_history:
