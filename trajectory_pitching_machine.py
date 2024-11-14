@@ -15,6 +15,7 @@ import numpy as np
 import numpy.linalg as LA
 import pandas as pd
 from matplotlib.colors import to_rgb
+from matplotlib.path import Path as matplotlib_path
 from scipy.optimize import leastsq
 from tqdm import tqdm
 
@@ -25,7 +26,7 @@ class Ball:
         self.trajectory_ball_limit = 9  # 限制最多儲存多少歷史紀錄用於推算軌跡落點
         self.show_ball_limit = 12  # 限制最多儲存多少歷史紀錄用於畫畫用
         self.bounce_ball_limit = 6  # 限制最多儲存多少歷史紀錄用於畫畫用
-        self.frame_limit = 30  # 限制相隔多少frame以後自動刪除
+        self.frame_limit = 20  # 限制相隔多少frame以後自動刪除
         self.center_history = [np.array(center)]  # 初始化中心點歷史紀錄
         self.trajectory_center_history = [np.array(center)]  # 初始化中心點歷史紀錄用於推算軌跡落點
         self.show_center_history = [np.array(center)]  # 初始化中心點歷史紀錄用於畫畫用
@@ -34,12 +35,15 @@ class Ball:
         self.bbox_size_history = [bbox_size]  # 初始化BBOX大小歷史紀錄
         self.iou_history = [0]  # 初始化IOU歷史紀錄
         self.score_history = [1.0]  # 初始化分數歷史紀錄
-        self.has_bounced = False
-        self.bounced_frame_number = -1
+        self.has_bounced = False  # 已經有落點了
+        self.bounced_frame_number = -1  # 落點的frame number
+        self.bounced_side = None  # 落點在哪一邊
+        self.is_tracking = True  # 使否還在追蹤
         self.new_center = np.array(center)
         self.new_bbox_size = np.array(bbox_size)
         self.new_frame_number = frame_number
         self.color_bgr_255 = color_bgr_255
+        self.count_ball = 1  # 紀錄總共多少個紀錄
 
         # 初始化平均值
         self.average_center = np.array(center)
@@ -86,6 +90,9 @@ class Ball:
         self.average_iou = self.get_average_iou()
         self.new_bbox = self.calculate_new_bbox(self.new_center, self.new_bbox_size)
 
+        # 增加記錄數量
+        self.count_ball += 1
+
     def _update_history(self, limit, history, new_value):
         # 更新歷史紀錄，保留最新的 ball_limit 個記錄
         history.append(new_value)
@@ -104,10 +111,11 @@ class Ball:
     def get_average_iou(self):
         return np.mean(self.iou_history)
 
-    def bounce(self, bounce_center, frame_number):
+    def bounce(self, bounce_center, frame_number, side):
         self._update_history(self.bounce_ball_limit, self.bounce_center_history, bounce_center)
         self.has_bounced = True
         self.bounced_frame_number = frame_number
+        self.bounced_side = side
 
     # Sigmoid 函数映射
     def sigmoid(self, x):
@@ -149,6 +157,47 @@ class BallTracker:
         self.ball_count = 0
         self.colormap = plt.get_cmap("Paired")  # 选择一个 colormap
         self.score_threshold = 0.5  # 分數筏值
+        self.count_ball_threahold = 15  # 有多少個歷史軌跡內才算發球
+        self.count_ball_add_last_frame_number = 0  # 最後一個紀錄到發球軌跡的frame number
+        self.count_balls = []  # 發球追蹤中
+        self.count_ball_reset_threahold = 200  # 幾個frame之後都沒有增加球就reset
+        self.count_ball_rounds = 1
+
+    def set_add_ball_polygon_path(self, add_ball_polygon_path):
+        self.add_ball_polygon_path = add_ball_polygon_path
+
+    def set_count_ball_polygon_path(self, count_ball_polygon_path):
+        self.count_ball_polygon_path = count_ball_polygon_path
+
+    def count_ball_reset(self, frame_number):
+        if frame_number - self.count_ball_add_last_frame_number >= self.count_ball_reset_threahold:
+            if len(self.count_balls) > 0:
+                self.count_ball_rounds += 1
+            self.count_balls = []
+
+    def count_ball_size(self):
+        return len(self.count_balls)
+
+    def count_ball_valid_hits(self):
+        valid_hits = 0
+        for ball in self.count_balls:
+            if ball.bounced_side == "right":
+                valid_hits += 1
+        return valid_hits
+
+    def count_ball_side_errors(self):
+        side_errors = 0
+        for ball in self.count_balls:
+            if ball.bounced_side == "left":
+                side_errors += 1
+        return side_errors
+
+    def count_ball_misses(self):
+        misses = 0
+        for ball in self.count_balls:
+            if not ball.has_bounced and not ball.is_tracking:
+                misses += 1
+        return misses
 
     def get_dynamic_color_bgr_255(self, index):
         # num_colors = self.colormap.N
@@ -174,6 +223,7 @@ class BallTracker:
             if frame_number - ball.new_frame_number > ball.frame_limit:
                 self.balls_history.append(ball)
                 self.balls.remove(ball)
+                ball.is_tracking = False
 
     def yolo2ball(self, bbox):
         # 提取 YOLO 格式的數據
@@ -207,7 +257,6 @@ class BallTracker:
             iou = 0
 
             # 遍歷所有已知的球，計算該檢測框和每個球的配對得分
-            has_match = False
             for ball in self.balls:
                 # 計算 IOU
                 iou = self.calculate_logistic_iou(ball.new_bbox, ball_bbox)
@@ -271,9 +320,6 @@ class BallTracker:
                     + aspect_ratio_score * aspect_ratio_weight
                 )
 
-                # if frame_number >= 3497:
-                #     print("test")
-
                 if score > self.score_threshold:
                     # 儲存所有配對的分數
                     all_scores.append((score, ball, center, bbox_size, iou))
@@ -296,7 +342,18 @@ class BallTracker:
         for bbox in detected_bboxes:
             center, bbox_size, ball_bbox = self.yolo2ball(bbox)
             if (center, bbox_size) not in used_detections:
-                self.add_ball(center, bbox_size, frame_number)
+                if self.add_ball_polygon_path.contains_point(center):
+                    self.add_ball(center, bbox_size, frame_number)
+
+        # 更新是否為發球機剛發出的球
+        for ball in self.balls:
+            if ball not in self.count_balls:  # 沒有被記錄過
+                if ball.count_ball < self.count_ball_threahold:  # 剛新增的球
+                    if ball.get_average_direction()[0] < 0:  # 向左飛行
+                        if self.count_ball_polygon_path.contains_point(ball.new_center):  # 在可以被記錄的區間內
+                            self.count_ball_reset(frame_number)
+                            self.count_ball_add_last_frame_number = frame_number
+                            self.count_balls.append(ball)  # 紀錄該球
 
     def calculate_center(self, bbox):
         x_center = bbox[1]  # 使用 YOLO 的 x_center
@@ -665,7 +722,7 @@ class Trajectory:
     def Draw_Circle(self, event, x, y, flags, param):
         # 用於透視變形取點
         if event == cv2.EVENT_LBUTTONDBLCLK:
-            cv2.circle(param["img"], (x, y), 3, (0, 255, 255), -1)
+            cv2.circle(param["img"], (x, y), 3, param["color"], -1)
             param["point_x"].append(x)
             param["point_y"].append(y)
 
@@ -794,7 +851,7 @@ class Trajectory:
 
     def Mark_Perspective_Distortion_Point(self, image, frame_width, frame_height):
         # 點選透視變形位置, 順序為:左上,左下,右下,右上
-        PT_data = {"img": image.copy(), "point_x": [], "point_y": []}
+        PT_data = {"img": image.copy(), "point_x": [], "point_y": [], "color": (0, 255, 255)}
         # TODO: 測試用
         PT_data["point_x"] = [508, 163, 1905, 1555]
         PT_data["point_y"] = [679, 827, 849, 686]
@@ -837,6 +894,52 @@ class Trajectory:
             self.Show_Bounce_Analysis()
         if self.is_show_bounce_location:
             self.Show_Bounce_Location()
+
+        # 框選發球機可增加球的位置，順序為:左上,左下,右下,右上
+        PT_data = {"img": image.copy(), "point_x": [], "point_y": [], "color": (0, 255, 128)}
+        # TODO: 測試用
+        PT_data["point_x"] = [1546, 1552, 1716, 1707]
+        PT_data["point_y"] = [566, 704, 720, 564]
+        # TODO 測試用
+        # cv2.namedWindow("pitching maching (press Q to quit)", 0)
+        # cv2.resizeWindow("pitching maching (press Q to quit)", frame_width, frame_height)
+        # cv2.setMouseCallback("pitching maching (press Q to quit)", self.Draw_Circle, PT_data)
+        # while True:
+        #     cv2.imshow("pitching maching (press Q to quit)", PT_data["img"])
+        #     if cv2.waitKey(2) == ord("q"):
+        #         print(PT_data)
+        #         cv2.destroyWindow("pitching maching (press Q to quit)")
+        #         break
+
+        upper_left = [PT_data["point_x"][0], PT_data["point_y"][0]]
+        lower_left = [PT_data["point_x"][1], PT_data["point_y"][1]]
+        lower_right = [PT_data["point_x"][2], PT_data["point_y"][2]]
+        upper_right = [PT_data["point_x"][3], PT_data["point_y"][3]]
+        add_ball_point = np.float32([upper_left, lower_left, lower_right, upper_right])
+        self.ball_tracker.set_add_ball_polygon_path(matplotlib_path(add_ball_point))
+
+        # 框選發球機計算球的位置，順序為:左上,左下,右下,右上
+        PT_data = {"img": image.copy(), "point_x": [], "point_y": [], "color": (255, 0, 0)}
+        # TODO: 測試用
+        PT_data["point_x"] = [1335, 1356, 1585, 1573]
+        PT_data["point_y"] = [462, 838, 845, 460]
+        # TODO 測試用
+        # cv2.namedWindow("count ball (press Q to quit)", 0)
+        # cv2.resizeWindow("count ball (press Q to quit)", frame_width, frame_height)
+        # cv2.setMouseCallback("count ball (press Q to quit)", self.Draw_Circle, PT_data)
+        # while True:
+        #     cv2.imshow("count ball (press Q to quit)", PT_data["img"])
+        #     if cv2.waitKey(2) == ord("q"):
+        #         print(PT_data)
+        #         cv2.destroyWindow("count ball (press Q to quit)")
+        #         break
+
+        upper_left = [PT_data["point_x"][0], PT_data["point_y"][0]]
+        lower_left = [PT_data["point_x"][1], PT_data["point_y"][1]]
+        lower_right = [PT_data["point_x"][2], PT_data["point_y"][2]]
+        upper_right = [PT_data["point_x"][3], PT_data["point_y"][3]]
+        count_ball_point = np.float32([upper_left, lower_left, lower_right, upper_right])
+        self.ball_tracker.set_count_ball_polygon_path(matplotlib_path(count_ball_point))
 
     def Read_Yolo_Label_One_Frame(self, label_file):
         balls = []
@@ -908,16 +1011,16 @@ class Trajectory:
                             self.PT_dict[self.count] = loc_PT
                             # 落點在左側
                             if self.PT_dict[self.count][0] <= int(self.miniboard_width / 2) + self.miniboard_edge:
-                                ball.bounce((x_drop, y_drop), self.count)
+                                ball.bounce((x_drop, y_drop), self.count, "left")
                                 self.Draw_and_Collect_Data(
-                                    (0, 0, 255),
+                                    (80, 127, 255),
                                 )
 
                             # 落點在右側
                             elif self.PT_dict[self.count][0] >= int(self.miniboard_width / 2) + self.miniboard_edge:
-                                ball.bounce((x_drop, y_drop), self.count)
+                                ball.bounce((x_drop, y_drop), self.count, "right")
                                 self.Draw_and_Collect_Data(
-                                    (80, 127, 255),
+                                    (0, 255, 0),
                                 )
 
         return image_CV
@@ -953,6 +1056,61 @@ class Trajectory:
             1,
             (0, 255, 255),
             1,
+            cv2.LINE_AA,
+        )
+
+        cv2.putText(
+            image_CV,
+            f"Rounds: {self.ball_tracker.count_ball_rounds}",
+            (10, 120),
+            cv2.FONT_HERSHEY_TRIPLEX,
+            2,
+            (0, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
+        cv2.putText(
+            image_CV,
+            f"Serves: {self.ball_tracker.count_ball_size()}",
+            (10, 200),
+            cv2.FONT_HERSHEY_TRIPLEX,
+            2,
+            (0, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
+        cv2.putText(
+            image_CV,
+            f"Valid Hits: {self.ball_tracker.count_ball_valid_hits()}",
+            (10, 280),
+            cv2.FONT_HERSHEY_TRIPLEX,
+            2,
+            (0, 255, 0),
+            2,
+            cv2.LINE_AA,
+        )
+
+        cv2.putText(
+            image_CV,
+            f"Side Errors: {self.ball_tracker.count_ball_side_errors()}",
+            (10, 360),
+            cv2.FONT_HERSHEY_TRIPLEX,
+            2,
+            (80, 127, 255),
+            2,
+            cv2.LINE_AA,
+        )
+
+        cv2.putText(
+            image_CV,
+            f"Misses: {self.ball_tracker.count_ball_misses()}",
+            (10, 440),
+            cv2.FONT_HERSHEY_TRIPLEX,
+            2,
+            (0, 0, 255),
+            2,
             cv2.LINE_AA,
         )
 
