@@ -174,6 +174,8 @@ class BallTracker:
             if len(self.count_balls) > 0:
                 self.count_ball_rounds += 1
             self.count_balls = []
+            return True
+        return False
 
     def count_ball_size(self):
         return len(self.count_balls)
@@ -346,14 +348,17 @@ class BallTracker:
                     self.add_ball(center, bbox_size, frame_number)
 
         # 更新是否為發球機剛發出的球
+        has_reset = False
         for ball in self.balls:
             if ball not in self.count_balls:  # 沒有被記錄過
                 if ball.count_ball < self.count_ball_threahold:  # 剛新增的球
                     if ball.get_average_direction()[0] < 0:  # 向左飛行
                         if self.count_ball_polygon_path.contains_point(ball.new_center):  # 在可以被記錄的區間內
-                            self.count_ball_reset(frame_number)
+                            has_reset = self.count_ball_reset(frame_number)
                             self.count_ball_add_last_frame_number = frame_number
                             self.count_balls.append(ball)  # 紀錄該球
+
+        return has_reset
 
     def calculate_center(self, bbox):
         x_center = bbox[1]  # 使用 YOLO 的 x_center
@@ -953,7 +958,9 @@ class Trajectory:
                             balls.append(l)
 
         if balls:
-            self.ball_tracker.update_balls(balls, self.count)
+            has_reset = self.ball_tracker.update_balls(balls, self.count)
+            if has_reset:
+                self.img_opt = self.Draw_MiniBoard()
         else:
             self.ball_tracker.no_detect_update_balls(self.count)
 
