@@ -16,12 +16,13 @@ import numpy.linalg as LA
 import pandas as pd
 from matplotlib.colors import to_rgb
 from matplotlib.path import Path as matplotlib_path
+from PIL import Image, ImageDraw, ImageFont
 from scipy.optimize import leastsq
 from tqdm import tqdm
 
 
 class Ball:
-    def __init__(self, center, bbox_size, frame_number, color_bgr_255):
+    def __init__(self, center, bbox_size, frame_number, color_bgr_255, frame_width):
         self.ball_limit = 5  # 限制最多儲存多少歷史紀錄
         self.trajectory_ball_limit = 9  # 限制最多儲存多少歷史紀錄用於推算軌跡落點
         self.show_ball_limit = 12  # 限制最多儲存多少歷史紀錄用於畫畫用
@@ -39,11 +40,13 @@ class Ball:
         self.bounced_frame_number = -1  # 落點的frame number
         self.bounced_side = None  # 落點在哪一邊
         self.is_tracking = True  # 使否還在追蹤
+        self.has_switch_avg_direction = False  # 是否打擊後反彈
         self.new_center = np.array(center)
         self.new_bbox_size = np.array(bbox_size)
         self.new_frame_number = frame_number
         self.color_bgr_255 = color_bgr_255
         self.count_ball = 1  # 紀錄總共多少個紀錄
+        self.frame_width = frame_width
 
         # 初始化平均值
         self.average_center = np.array(center)
@@ -90,6 +93,9 @@ class Ball:
         self.average_iou = self.get_average_iou()
         self.new_bbox = self.calculate_new_bbox(self.new_center, self.new_bbox_size)
 
+        # 確認是否擊到球
+        self.check_is_switch_avg_direction()
+
         # 增加記錄數量
         self.count_ball += 1
 
@@ -121,11 +127,11 @@ class Ball:
     def sigmoid(self, x):
         return 1 / (1 + np.exp(-10 * (x - 0.5)))  # 调整参数以控制形状
 
-    def calculate_weights(self, frame_width):
+    def calculate_weights(self):
         # 計算權重
         historical_iou = self.get_average_iou()
         iou_weight = self.sigmoid(historical_iou)  # IOU 的權重
-        x_position_ratio = self.average_center[0] / frame_width  # 球在畫面中的x位置比率 [0, 1]
+        x_position_ratio = self.average_center[0] / self.frame_width  # 球在畫面中的x位置比率 [0, 1]
         distance_weight = 0.45 + x_position_ratio * 0.25  # 離右邊越近，距離權重越高
         direction_weight = max(0.0, -0.2 + x_position_ratio * 0.9)  # 離右邊越近，方向權重越高
         aspect_ratio_weight = 0.25 + x_position_ratio * 0.25  # 離右邊越近，距離權重越高
@@ -148,6 +154,11 @@ class Ball:
             center[1] + bbox_size[1] / 2,
         ]
         return ball_bbox
+
+    def check_is_switch_avg_direction(self):
+        if self.new_center[0] < (self.frame_width / 2):  # 畫面左邊
+            if self.get_average_direction()[0] > 0:  # 平均方向向右
+                self.has_switch_avg_direction = True
 
 
 class BallTracker:
@@ -194,11 +205,20 @@ class BallTracker:
                 side_errors += 1
         return side_errors
 
+    def count_ball_out_hits(self):
+        out_hits = 0
+        for ball in self.count_balls:
+            if not ball.has_bounced and not ball.is_tracking:
+                if ball.has_switch_avg_direction:
+                    out_hits += 1
+        return out_hits
+
     def count_ball_misses(self):
         misses = 0
         for ball in self.count_balls:
             if not ball.has_bounced and not ball.is_tracking:
-                misses += 1
+                if not ball.has_switch_avg_direction:
+                    misses += 1
         return misses
 
     def get_dynamic_color_bgr_255(self, index):
@@ -214,10 +234,10 @@ class BallTracker:
         self.frame_width = frame_width
         self.frame_height = frame_height
 
-    def add_ball(self, center, bbox_size, frame_number):
+    def add_ball(self, center, bbox_size, frame_number, frame_width):
         self.ball_count += 1
         color_bgr_255 = self.get_dynamic_color_bgr_255(self.ball_count)
-        new_ball = Ball(center, bbox_size, frame_number, color_bgr_255)
+        new_ball = Ball(center, bbox_size, frame_number, color_bgr_255, frame_width)
         self.balls.append(new_ball)
 
     def remove_non_tracking_ball(self, frame_number):
@@ -297,9 +317,7 @@ class BallTracker:
                 max_distance = np.linalg.norm(weighted_diff) / 4
 
                 # 獲取權重
-                iou_weight, direction_weight, distance_weight, aspect_ratio_weight = ball.calculate_weights(
-                    self.frame_width
-                )
+                iou_weight, direction_weight, distance_weight, aspect_ratio_weight = ball.calculate_weights()
 
                 # 計算各個因素的分數
                 iou_score = iou  # IOU 越大分數越高
@@ -345,7 +363,7 @@ class BallTracker:
             center, bbox_size, ball_bbox = self.yolo2ball(bbox)
             if (center, bbox_size) not in used_detections:
                 if self.add_ball_polygon_path.contains_point(center):
-                    self.add_ball(center, bbox_size, frame_number)
+                    self.add_ball(center, bbox_size, frame_number, self.frame_width)
 
         # 更新是否為發球機剛發出的球
         has_reset = False
@@ -1032,6 +1050,19 @@ class Trajectory:
 
         return image_CV
 
+    def draw_chinese_text(self, image, text, position, font_size, color):
+        # 轉換 BGR 到 RGB
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(image)
+        draw = ImageDraw.Draw(pil_image)
+
+        # 加載字體
+        font = ImageFont.truetype("ttf/MSJH.TTC", font_size)
+        draw.text(position, text, fill=color, font=font)
+
+        # 再轉回 OpenCV 格式
+        return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+
     def Draw_On_Image(self, image_CV):
         for ball in self.ball_tracker.balls:
             # draw current frame prediction and previous 11 frames as yellow circle, total: 12 frames
@@ -1055,71 +1086,114 @@ class Trajectory:
                     self.frame_width - (self.miniboard_width + self.miniboard_edge * 2) :,
                 ] = self.img_opt
 
-        cv2.putText(
+        base = 10
+        interval = 50
+        image_CV = self.draw_chinese_text(image_CV, f"幀數: {self.count}", (10, base), 36, (255, 255, 0))
+        base += interval
+        image_CV = self.draw_chinese_text(
+            image_CV, f"回合數: {self.ball_tracker.count_ball_rounds}", (10, base), 36, (255, 255, 0)
+        )
+        base += interval
+        image_CV = self.draw_chinese_text(
+            image_CV, f"發球數: {self.ball_tracker.count_ball_size()}", (10, base), 36, (255, 255, 0)
+        )
+        base += interval
+        image_CV = self.draw_chinese_text(
+            image_CV, f"有效擊球: {self.ball_tracker.count_ball_valid_hits()}", (10, base), 36, (0, 255, 0)
+        )
+        base += interval
+        image_CV = self.draw_chinese_text(
             image_CV,
-            f"Frame : {self.count}",
-            (10, 40),
-            cv2.FONT_HERSHEY_TRIPLEX,
-            1,
-            (0, 255, 255),
-            1,
-            cv2.LINE_AA,
+            f"錯誤落點: {self.ball_tracker.count_ball_side_errors()}",
+            (10, base),
+            36,
+            (255, 127, 80),
+        )
+        base += interval
+        image_CV = self.draw_chinese_text(
+            image_CV, f"出界擊球: {self.ball_tracker.count_ball_out_hits()}", (10, base), 36, (255, 0, 0)
+        )
+        base += interval
+        image_CV = self.draw_chinese_text(
+            image_CV, f"未擊中: {self.ball_tracker.count_ball_misses()}", (10, base), 36, (255, 0, 0)
         )
 
-        cv2.putText(
-            image_CV,
-            f"Rounds: {self.ball_tracker.count_ball_rounds}",
-            (10, 120),
-            cv2.FONT_HERSHEY_TRIPLEX,
-            2,
-            (0, 255, 255),
-            2,
-            cv2.LINE_AA,
-        )
+        # cv2.putText(
+        #     image_CV,
+        #     f"Frame : {self.count}",
+        #     (10, 40),
+        #     cv2.FONT_HERSHEY_TRIPLEX,
+        #     1,
+        #     (0, 255, 255),
+        #     1,
+        #     cv2.LINE_AA,
+        # )
 
-        cv2.putText(
-            image_CV,
-            f"Serves: {self.ball_tracker.count_ball_size()}",
-            (10, 200),
-            cv2.FONT_HERSHEY_TRIPLEX,
-            2,
-            (0, 255, 255),
-            2,
-            cv2.LINE_AA,
-        )
+        # cv2.putText(
+        #     image_CV,
+        #     f"Rounds: {self.ball_tracker.count_ball_rounds}",
+        #     (10, 120),
+        #     cv2.FONT_HERSHEY_TRIPLEX,
+        #     2,
+        #     (0, 255, 255),
+        #     2,
+        #     cv2.LINE_AA,
+        # )
 
-        cv2.putText(
-            image_CV,
-            f"Valid Hits: {self.ball_tracker.count_ball_valid_hits()}",
-            (10, 280),
-            cv2.FONT_HERSHEY_TRIPLEX,
-            2,
-            (0, 255, 0),
-            2,
-            cv2.LINE_AA,
-        )
+        # cv2.putText(
+        #     image_CV,
+        #     f"Serves: {self.ball_tracker.count_ball_size()}",
+        #     (10, 200),
+        #     cv2.FONT_HERSHEY_TRIPLEX,
+        #     2,
+        #     (0, 255, 255),
+        #     2,
+        #     cv2.LINE_AA,
+        # )
 
-        cv2.putText(
-            image_CV,
-            f"Side Errors: {self.ball_tracker.count_ball_side_errors()}",
-            (10, 360),
-            cv2.FONT_HERSHEY_TRIPLEX,
-            2,
-            (80, 127, 255),
-            2,
-            cv2.LINE_AA,
-        )
+        # cv2.putText(
+        #     image_CV,
+        #     f"Valid Hits: {self.ball_tracker.count_ball_valid_hits()}",
+        #     (10, 280),
+        #     cv2.FONT_HERSHEY_TRIPLEX,
+        #     2,
+        #     (0, 255, 0),
+        #     2,
+        #     cv2.LINE_AA,
+        # )
 
-        cv2.putText(
-            image_CV,
-            f"Misses: {self.ball_tracker.count_ball_misses()}",
-            (10, 440),
-            cv2.FONT_HERSHEY_TRIPLEX,
-            2,
-            (0, 0, 255),
-            2,
-            cv2.LINE_AA,
-        )
+        # cv2.putText(
+        #     image_CV,
+        #     f"Side Errors: {self.ball_tracker.count_ball_side_errors()}",
+        #     (10, 360),
+        #     cv2.FONT_HERSHEY_TRIPLEX,
+        #     2,
+        #     (80, 127, 255),
+        #     2,
+        #     cv2.LINE_AA,
+        # )
+
+        # cv2.putText(
+        #     image_CV,
+        #     f"Out hits: {self.ball_tracker.count_ball_out_hits()}",
+        #     (10, 440),
+        #     cv2.FONT_HERSHEY_TRIPLEX,
+        #     2,
+        #     (0, 0, 255),
+        #     2,
+        #     cv2.LINE_AA,
+        # )
+
+        # cv2.putText(
+        #     image_CV,
+        #     f"Misses: {self.ball_tracker.count_ball_misses()}",
+        #     (10, 520),
+        #     cv2.FONT_HERSHEY_TRIPLEX,
+        #     2,
+        #     (0, 0, 255),
+        #     2,
+        #     cv2.LINE_AA,
+        # )
 
         # for idx, ball in enumerate(self.ball_tracker.balls, 1):
         #     cv2.putText(
