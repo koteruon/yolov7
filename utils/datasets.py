@@ -21,14 +21,23 @@ import torch.nn.functional as F
 from PIL import ExifTags, Image
 from torch.utils.data import Dataset
 from torchvision.ops import ps_roi_align, ps_roi_pool, roi_align, roi_pool
+
 # from pycocotools import mask as maskUtils
 from torchvision.utils import save_image
 from tqdm import tqdm
 
 from trajectory import Trajectory
-from utils.general import (check_requirements, clean_str, resample_segments,
-                           segment2box, segments2boxes, xyn2xy, xywh2xyxy,
-                           xywhn2xyxy, xyxy2xywh)
+from utils.general import (
+    check_requirements,
+    clean_str,
+    resample_segments,
+    segment2box,
+    segments2boxes,
+    xyn2xy,
+    xywh2xyxy,
+    xywhn2xyxy,
+    xyxy2xywh,
+)
 from utils.torch_utils import torch_distributed_zero_first
 
 # Parameters
@@ -307,6 +316,7 @@ class LoadCamera:  # for inference
         height=1920,
         width=1080,
         opencv_or_ffmpeg="opencv",
+        trajectory=True,
     ):
         self.device = device
         self.half = half
@@ -318,6 +328,7 @@ class LoadCamera:  # for inference
         self.width = width
         self.fps = fps
         self.opencv_or_ffmpeg = opencv_or_ffmpeg
+        self.trajectory = trajectory
         if self.opencv_or_ffmpeg == "opencv":
             self.cap = cv2.VideoCapture(self.source)  # video capture object
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)  # set buffer size
@@ -333,7 +344,8 @@ class LoadCamera:  # for inference
             )
             in_bytes = self.process.stdout.read(self.height * self.width * 3)
             img0 = np.frombuffer(in_bytes, np.uint8).reshape([self.height, self.width, 3])
-        self.trajectory_init(img0)  # 落點
+        if self.trajectory:
+            self.trajectory_init(img0)  # 落點
         self.model_choices = model_choices  # yolo or tracknet
         self.tracknet_image_list = None
 
@@ -384,25 +396,9 @@ class LoadCamera:  # for inference
         else:
             img0 = self.read_frame_from_ffmpeg()
 
-        key = cv2.waitKey(1)
-        if key == ord("q"):  # q to quit
-            self.trajectory.Write_Bounce_Location()
-            # output bouncing analyze img
-            self.trajectory.Draw_Bounce_Analysis()
-            self.trajectory.Save_Bounce_Analysis()
-            # For saving bounce map.
-            self.trajectory.Save_Bounce_Location()
-            # For saving bounce map.
-            self.trajectory.Save_Bounce_Location()
-            # For saving speedHist
-            self.trajectory.Draw_SpeedHist()
-
-            self.cap.release()
-            cv2.destroyAllWindows()
-            raise StopIteration
-
-        if key == ord("e"):  # e to end
-            if self.trajectory:
+        if self.trajectory:
+            key = cv2.waitKey(1)
+            if key == ord("q"):  # q to quit
                 self.trajectory.Write_Bounce_Location()
                 # output bouncing analyze img
                 self.trajectory.Draw_Bounce_Analysis()
@@ -413,12 +409,29 @@ class LoadCamera:  # for inference
                 self.trajectory.Save_Bounce_Location()
                 # For saving speedHist
                 self.trajectory.Draw_SpeedHist()
-                del self.trajectory
-                self.trajectory = None
 
-        if key == ord("s"):  # s to start
-            if not self.trajectory:
-                self.trajectory_init(img0)  # 落點
+                self.cap.release()
+                cv2.destroyAllWindows()
+                raise StopIteration
+
+            if key == ord("e"):  # e to end
+                if self.trajectory:
+                    self.trajectory.Write_Bounce_Location()
+                    # output bouncing analyze img
+                    self.trajectory.Draw_Bounce_Analysis()
+                    self.trajectory.Save_Bounce_Analysis()
+                    # For saving bounce map.
+                    self.trajectory.Save_Bounce_Location()
+                    # For saving bounce map.
+                    self.trajectory.Save_Bounce_Location()
+                    # For saving speedHist
+                    self.trajectory.Draw_SpeedHist()
+                    del self.trajectory
+                    self.trajectory = None
+
+            if key == ord("s"):  # s to start
+                if not self.trajectory:
+                    self.trajectory_init(img0)  # 落點
 
         if self.model_choices == "yolo":
             # Padded resize

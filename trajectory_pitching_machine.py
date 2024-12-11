@@ -173,6 +173,7 @@ class BallTracker:
         self.count_balls = []  # 發球追蹤中
         self.count_ball_reset_threahold = 200  # 幾個frame之後都沒有增加球就reset
         self.count_ball_rounds = 1
+        self.count_ball_score = {}  # key: round, value: (score)
 
     def set_add_ball_polygon_path(self, add_ball_polygon_path):
         self.add_ball_polygon_path = add_ball_polygon_path
@@ -187,6 +188,21 @@ class BallTracker:
             self.count_balls = []
             return True
         return False
+
+    def count_ball_calculate_score(self, frame_number):
+        if frame_number - self.count_ball_add_last_frame_number >= self.count_ball_reset_threahold:
+            if self.count_ball_rounds not in self.count_ball_score:
+                if len(self.count_balls) > 0:
+                    if self.count_ball_size() == self.count_ball_valid_hits():
+                        self.count_ball_score[self.count_ball_rounds] = (1, 0)
+                    else:
+                        self.count_ball_score[self.count_ball_rounds] = (0, 1)
+
+    def count_ball_get_score(self):
+        if self.count_ball_score:
+            return tuple(map(sum, zip(*self.count_ball_score.values())))
+        else:
+            return (0, 0)
 
     def count_ball_size(self):
         return len(self.count_balls)
@@ -266,11 +282,13 @@ class BallTracker:
 
     def no_detect_update_balls(self, frame_number):
         self.remove_non_tracking_ball(frame_number)
+        self.count_ball_calculate_score(frame_number)
         for ball in self.balls:
             ball.no_detect_update_position()
 
     def update_balls(self, detected_bboxes, frame_number):
         self.remove_non_tracking_ball(frame_number)
+        self.count_ball_calculate_score(frame_number)
 
         all_scores = []  # 儲存所有檢測框和所有球的配對及其分數
 
@@ -1086,6 +1104,7 @@ class Trajectory:
                     self.frame_width - (self.miniboard_width + self.miniboard_edge * 2) :,
                 ] = self.img_opt
 
+        # 左方的
         base = 10
         interval = 50
         image_CV = self.draw_chinese_text(image_CV, f"幀數: {self.count}", (10, base), 36, (255, 255, 0))
@@ -1111,12 +1130,16 @@ class Trajectory:
         )
         base += interval
         image_CV = self.draw_chinese_text(
-            image_CV, f"出界擊球: {self.ball_tracker.count_ball_out_hits()}", (10, base), 36, (255, 0, 0)
+            image_CV, f"擊球出界: {self.ball_tracker.count_ball_out_hits()}", (10, base), 36, (255, 0, 0)
         )
         base += interval
         image_CV = self.draw_chinese_text(
             image_CV, f"未擊中: {self.ball_tracker.count_ball_misses()}", (10, base), 36, (255, 0, 0)
         )
+
+        # 比分
+        score = self.ball_tracker.count_ball_get_score()
+        image_CV = self.draw_chinese_text(image_CV, f"{score[0]} : {score[1]}", (750, 10), 256, (255, 255, 0))
 
         # cv2.putText(
         #     image_CV,
