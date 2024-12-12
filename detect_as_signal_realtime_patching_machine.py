@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
+from matplotlib.path import Path as matplotlib_path
 from tqdm import tqdm
 
 from models.experimental import attempt_load
@@ -30,6 +31,39 @@ from utils.torch_utils import TracedModel, load_classifier, select_device, time_
 
 
 class YoloV7:
+    def __init__(self):
+        self.mark_no_count = False
+        self.has_mark_no_count_points = False
+
+    def Draw_Circle(self, event, x, y, flags, param):
+        # 用於透視變形取點
+        if event == cv2.EVENT_LBUTTONDBLCLK:
+            cv2.circle(param["img"], (x, y), 3, (0, 255, 255), -1)
+            param["point_x"].append(x)
+            param["point_y"].append(y)
+
+    def Mark_No_Count_Point(self, image, frame_width, frame_height):
+        # 點選透視變形位置, 順序為:左上,左下,右下,右上
+        PT_data = {"img": image.copy(), "point_x": [], "point_y": []}
+        # TODO 測試用
+        cv2.namedWindow("PIC2 (press Q to quit)", 0)
+        cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
+        cv2.setMouseCallback("PIC2 (press Q to quit)", self.Draw_Circle, PT_data)
+        while True:
+            cv2.imshow("PIC2 (press Q to quit)", PT_data["img"])
+            if cv2.waitKey(2) == ord("q"):
+                print(PT_data)
+                cv2.destroyWindow("PIC2 (press Q to quit)")
+                break
+
+        # PerspectiveTransform
+        upper_left = [PT_data["point_x"][0] / frame_width, PT_data["point_y"][0] / frame_height]
+        lower_left = [PT_data["point_x"][1] / frame_width, PT_data["point_y"][1] / frame_height]
+        lower_right = [PT_data["point_x"][2] / frame_width, PT_data["point_y"][2] / frame_height]
+        upper_right = [PT_data["point_x"][3] / frame_width, PT_data["point_y"][3] / frame_height]
+        no_count_point = np.float32([upper_left, lower_left, lower_right, upper_right])
+        self.polygon_path = matplotlib_path(no_count_point)
+
     def detect(self, only_ball=False):
         source, weights, view_img, save_txt, imgsz, trace = (
             opt.source,
@@ -96,10 +130,15 @@ class YoloV7:
 
         # recording
         is_recording = False
+        vid_writer = None
 
         t4 = time_synchronized()
         # yolo detect
         for img, im0s, trajectory in dataset:
+            if not self.has_mark_no_count_points and self.mark_no_count:
+                self.Mark_No_Count_Point(im0s, im0s.shape[1], im0s.shape[0])
+                self.has_mark_no_count_points = True
+
             # Warmup
             if device.type != "cpu" and (
                 old_img_b != img.shape[0] or old_img_h != img.shape[2] or old_img_w != img.shape[3]
@@ -149,13 +188,16 @@ class YoloV7:
                             numerator, denominator = map(int, opt.ball_botton_boundary.split("/"))
                             if xywh[1] > (numerator / denominator):  # y軸在界線之下
                                 continue
+                        if self.mark_no_count:
+                            ball_center = [xywh[0], xywh[1]]
+                            if self.has_mark_no_count_points and self.polygon_path.contains_point(ball_center):
+                                continue
 
                         lines.append((cls, *xywh, conf) if opt.save_conf else (cls, *xywh))  # label format
                         label = f"{names[int(0)]} {conf.item():.2f}"
                         plot_one_box(xyxy, im0, label=label, color=colors[int(0)], line_thickness=1)
 
                 if opt.save_video and view_img:
-                    cv2.imshow("Realtime Trajectory", im0)
                     key = cv2.waitKey(1) & 0xFF
                     if key == ord("s"):
                         if not is_recording:
@@ -172,7 +214,7 @@ class YoloV7:
                             vid_writer = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
                             print("開始錄影...")
 
-                    if key == ord("p"):
+                    if key == ord("t"):
                         if is_recording:
                             for text in tqdm(list(text_buffer), desc="處理text資料"):
                                 for txt_path, lines in text.items():
@@ -193,12 +235,32 @@ class YoloV7:
                         print("收到終止信號，結束程序...")
                         sys.exit(0)
 
+                    if key == 32:
+                        cv2.putText(im0, "PAUSE", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 165, 255), 2, cv2.LINE_AA)
+                        cv2.imshow("Realtime Trajectory", im0)
+                        paused = True
+                        while paused:
+                            key = cv2.waitKey(1) & 0xFF
+                            if key == 32:  # 再次按下空白鍵時恢復
+                                paused = False
+                                print("錄影已恢復...")
+                            time.sleep(0.1)
+                        time.sleep(1)
+
                     if is_recording:
+                        cv2.putText(
+                            im0, "RECORDING", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA
+                        )
                         video_buffer.append(im0s)
                         if lines:
                             txt_path = str(text_dir / p.stem) + f"_{record_frame}"
                             text_buffer.append({f"{txt_path}": lines})
                         record_frame += 1
+                    else:
+                        cv2.putText(
+                            im0, "STAND BY", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (34, 139, 34), 2, cv2.LINE_AA
+                        )
+                    cv2.imshow("Realtime Trajectory", im0)
 
                 # Print time (inference + NMS)
                 print(
