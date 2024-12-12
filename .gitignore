@@ -266,3 +266,7 @@ crashlytics-build.properties
 fabric.properties
 
 .conda
+opencv
+opencv_contrib
+install
+build

@@ -25,3 +25,22 @@ ffmpeg -i input_video.mp4 image_%d.jpg
 
 # 訓練高速相機
 python train.py --workers 6 --batch-size 6 --data data/coco.yaml --img 960 960 --cfg cfg/training/yolov7-e6e.yaml --weights ./weights/yolov7x_3classes --name yolov7-e6e_20240313 --hyp data/hyp.scratch.custom.yaml
+
+
+cmake \
+    -D CMAKE_BUILD_TYPE=RELEASE \
+    -D CMAKE_INSTALL_PREFIX=../install \
+    -D BUILD_DOCS=ON \
+    -D BUILD_EXAMPLES=ON \
+    -D BUILD_opencv_python3=ON \
+    -D BUILD_opencv_python2=OFF \
+    -D PYTHON3_EXECUTABLE=/home/chaoen/miniconda3/envs/patching_machine/bin/python \
+    -D PYTHON3_LIBRARY=/home/chaoen/miniconda3/envs/patching_machine/lib/libpython3.10.so \
+    -D PYTHON3_INCLUDE_DIR=/home/chaoen/miniconda3/envs/patching_machine/include/python3.10 \
+    -D PYTHON3_NUMPY_INCLUDE_DIRS=/home/chaoen/miniconda3/envs/patching_machine/lib/python3.10/site-packages/numpy/core/include \
+    -D Pylint_DIR=/home/chaoen/miniconda3/envs/patching_machine/bin/pylint \
+    -D OPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules \
+    -D OPENCV_GENERATE_PKGCONFIG=ON \
+    -D INSTALL_PYTHON_EXAMPLES=ON \
+    -D WITH_FREETYPE=ON \
+    ../opencv

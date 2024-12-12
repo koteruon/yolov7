@@ -1068,19 +1068,6 @@ class Trajectory:
 
         return image_CV
 
-    def draw_chinese_text(self, image, text, position, font_size, color):
-        # 轉換 BGR 到 RGB
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        pil_image = Image.fromarray(image)
-        draw = ImageDraw.Draw(pil_image)
-
-        # 加載字體
-        font = ImageFont.truetype("ttf/MSJH.TTC", font_size)
-        draw.text(position, text, fill=color, font=font)
-
-        # 再轉回 OpenCV 格式
-        return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-
     def Draw_On_Image(self, image_CV):
         for ball in self.ball_tracker.balls:
             # draw current frame prediction and previous 11 frames as yellow circle, total: 12 frames
@@ -1104,131 +1091,82 @@ class Trajectory:
                     self.frame_width - (self.miniboard_width + self.miniboard_edge * 2) :,
                 ] = self.img_opt
 
-        # 左方的
-        base = 10
-        interval = 50
-        image_CV = self.draw_chinese_text(image_CV, f"幀數: {self.count}", (10, base), 36, (255, 255, 0))
-        base += interval
-        image_CV = self.draw_chinese_text(
-            image_CV, f"回合數: {self.ball_tracker.count_ball_rounds}", (10, base), 36, (255, 255, 0)
-        )
-        base += interval
-        image_CV = self.draw_chinese_text(
-            image_CV, f"發球數: {self.ball_tracker.count_ball_size()}", (10, base), 36, (255, 255, 0)
-        )
-        base += interval
-        image_CV = self.draw_chinese_text(
-            image_CV, f"有效擊球: {self.ball_tracker.count_ball_valid_hits()}", (10, base), 36, (0, 255, 0)
-        )
-        base += interval
-        image_CV = self.draw_chinese_text(
+        self.freetype.putText(
             image_CV,
-            f"錯誤落點: {self.ball_tracker.count_ball_side_errors()}",
-            (10, base),
+            f"幀數: {self.count}",
+            (10, 20),
             36,
-            (255, 127, 80),
+            (0, 255, 255),
+            -1,
+            cv2.LINE_AA,
+            False,
         )
-        base += interval
-        image_CV = self.draw_chinese_text(
-            image_CV, f"擊球出界: {self.ball_tracker.count_ball_out_hits()}", (10, base), 36, (255, 0, 0)
+        self.freetype.putText(
+            image_CV,
+            f"回合數: {self.ball_tracker.count_ball_rounds}",
+            (10, 70),
+            36,
+            (0, 255, 255),
+            -1,
+            cv2.LINE_AA,
+            False,
         )
-        base += interval
-        image_CV = self.draw_chinese_text(
-            image_CV, f"未擊中: {self.ball_tracker.count_ball_misses()}", (10, base), 36, (255, 0, 0)
+        self.freetype.putText(
+            image_CV,
+            f"發球數: {self.ball_tracker.count_ball_size()}",
+            (10, 120),
+            36,
+            (0, 255, 255),
+            -1,
+            cv2.LINE_AA,
+            False,
         )
+        self.freetype.putText(
+            image_CV,
+            f"有效擊球: {self.ball_tracker.count_ball_valid_hits()}",
+            (10, 170),
+            36,
+            (0, 255, 0),
+            -1,
+            cv2.LINE_AA,
+            False,
+        )
+
+        if self.analysis_output:
+            self.freetype.putText(
+                image_CV,
+                f"錯誤落點: {self.ball_tracker.count_ball_side_errors()}",
+                (10, 220),
+                36,
+                (80, 127, 255),
+                -1,
+                cv2.LINE_AA,
+                False,
+            )
+            self.freetype.putText(
+                image_CV,
+                f"擊球出界: {self.ball_tracker.count_ball_out_hits()}",
+                (10, 270),
+                36,
+                (0, 0, 255),
+                -1,
+                cv2.LINE_AA,
+                False,
+            )
+            self.freetype.putText(
+                image_CV,
+                f"未擊中: {self.ball_tracker.count_ball_misses()}",
+                (10, 320),
+                36,
+                (0, 0, 255),
+                -1,
+                cv2.LINE_AA,
+                False,
+            )
 
         # 比分
         score = self.ball_tracker.count_ball_get_score()
-        image_CV = self.draw_chinese_text(image_CV, f"{score[0]} : {score[1]}", (750, 10), 256, (255, 255, 0))
-
-        # cv2.putText(
-        #     image_CV,
-        #     f"Frame : {self.count}",
-        #     (10, 40),
-        #     cv2.FONT_HERSHEY_TRIPLEX,
-        #     1,
-        #     (0, 255, 255),
-        #     1,
-        #     cv2.LINE_AA,
-        # )
-
-        # cv2.putText(
-        #     image_CV,
-        #     f"Rounds: {self.ball_tracker.count_ball_rounds}",
-        #     (10, 120),
-        #     cv2.FONT_HERSHEY_TRIPLEX,
-        #     2,
-        #     (0, 255, 255),
-        #     2,
-        #     cv2.LINE_AA,
-        # )
-
-        # cv2.putText(
-        #     image_CV,
-        #     f"Serves: {self.ball_tracker.count_ball_size()}",
-        #     (10, 200),
-        #     cv2.FONT_HERSHEY_TRIPLEX,
-        #     2,
-        #     (0, 255, 255),
-        #     2,
-        #     cv2.LINE_AA,
-        # )
-
-        # cv2.putText(
-        #     image_CV,
-        #     f"Valid Hits: {self.ball_tracker.count_ball_valid_hits()}",
-        #     (10, 280),
-        #     cv2.FONT_HERSHEY_TRIPLEX,
-        #     2,
-        #     (0, 255, 0),
-        #     2,
-        #     cv2.LINE_AA,
-        # )
-
-        # cv2.putText(
-        #     image_CV,
-        #     f"Side Errors: {self.ball_tracker.count_ball_side_errors()}",
-        #     (10, 360),
-        #     cv2.FONT_HERSHEY_TRIPLEX,
-        #     2,
-        #     (80, 127, 255),
-        #     2,
-        #     cv2.LINE_AA,
-        # )
-
-        # cv2.putText(
-        #     image_CV,
-        #     f"Out hits: {self.ball_tracker.count_ball_out_hits()}",
-        #     (10, 440),
-        #     cv2.FONT_HERSHEY_TRIPLEX,
-        #     2,
-        #     (0, 0, 255),
-        #     2,
-        #     cv2.LINE_AA,
-        # )
-
-        # cv2.putText(
-        #     image_CV,
-        #     f"Misses: {self.ball_tracker.count_ball_misses()}",
-        #     (10, 520),
-        #     cv2.FONT_HERSHEY_TRIPLEX,
-        #     2,
-        #     (0, 0, 255),
-        #     2,
-        #     cv2.LINE_AA,
-        # )
-
-        # for idx, ball in enumerate(self.ball_tracker.balls, 1):
-        #     cv2.putText(
-        #         image_CV,
-        #         f"Score : {ball.score_history[-1]:.2f}",
-        #         (10, 40 + 40 * idx),
-        #         cv2.FONT_HERSHEY_TRIPLEX,
-        #         1,
-        #         tuple(map(int, ball.color_bgr_255)),
-        #         1,
-        #         cv2.LINE_AA,
-        #     )
+        self.freetype.putText(image_CV, f"{score[0]}:{score[1]}", (850, 25), 250, (0, 255, 255), -1, cv2.LINE_AA, False)
 
         return image_CV
 
@@ -1264,6 +1202,7 @@ class Trajectory:
         return image
 
     def __init__(self, real_time=False):
+
         # temp#
         self.only_speed = False
 
@@ -1340,6 +1279,10 @@ class Trajectory:
             self.video_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
         self.ball_tracker = BallTracker()
+
+        self.analysis_output = True
+        self.freetype = cv2.freetype.createFreeType2()
+        self.freetype.loadFontData(fontFileName="ttf/MSJH.TTC", id=0)
 
     def Set_Frame_Info(self, frame_height, frame_width, framerate):
         self.frame_height = frame_height
