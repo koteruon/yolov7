@@ -1210,8 +1210,34 @@ class Trajectory:
         self.WIDTH = 512
 
         # 影片跟目錄
-        root_path = f"./runs/detect/pitching_machine_20241019"
-        video_fullname = "C0086.MP4"
+        max_num = -1
+        max_folder = ""  # realtime3
+        root_path = f"./runs/detect"
+        pattern = re.compile(r"^realtime(\d+)$")
+        if max_folder == "":
+            for folder_name in os.listdir(root_path):
+                match = pattern.match(folder_name)
+                if match:
+                    num = int(match.group(1))
+                    if num > max_num:
+                        max_num = num
+                        max_folder = folder_name
+        root_path = os.path.join(root_path, max_folder)
+        sub_max_num = -1
+        sub_max_folder = ""  # Realtime
+        sub_pattern = re.compile(r"^Realtime(\d+)$")
+        if sub_max_folder == "":
+            for folder_name in os.listdir(root_path):
+                match = sub_pattern.match(folder_name)
+                if match:
+                    num = int(match.group(1))
+                    if num > sub_max_num:
+                        sub_max_num = num
+                        sub_max_folder = folder_name
+        root_path = os.path.join(root_path, sub_max_folder)
+        print(f"root_path: {root_path}")
+
+        video_fullname = "Realtime.mp4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
         self.input_path = os.path.join(root_path, video_fullname)
@@ -1229,6 +1255,9 @@ class Trajectory:
             self.speedhis_path,
             self.speed_distribution_path,
         ) = self.Create_Output_Dir(output_path, self.video_name)
+
+        self.video_path = os.path.join(self.video_path, max_folder, sub_max_folder)
+        Path(self.video_path).mkdir(parents=True, exist_ok=True)
 
         # yolo labels path
         self.label_path = os.path.join(root_path, "labels")
@@ -1280,7 +1309,7 @@ class Trajectory:
 
         self.ball_tracker = BallTracker()
 
-        self.analysis_output = True
+        self.analysis_output = False
         self.freetype = cv2.freetype.createFreeType2()
         self.freetype.loadFontData(fontFileName="ttf/MSJH.TTC", id=0)
 

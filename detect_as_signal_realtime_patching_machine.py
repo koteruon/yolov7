@@ -209,7 +209,7 @@ class YoloV7:
                             text_dir = Path(sub_save_path / "labels")
                             text_dir.mkdir(parents=True, exist_ok=True)
                             is_recording = True
-                            record_frame = 0
+                            record_frame = 1
                             fps, w, h = 60, im0.shape[1], im0.shape[0]
                             vid_writer = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
                             print("開始錄影...")
