@@ -18,7 +18,7 @@ from utils.datasets import LoadCamera, LoadImages, LoadStreams
 from utils.general import (apply_classifier, check_img_size, check_imshow,
                            check_requirements, increment_path,
                            non_max_suppression, scale_coords, set_logging,
-                           strip_optimizer, xyxy2xywh)
+                           strip_optimizer, xywh2xyxy, xyxy2xywh)
 from utils.plots import plot_one_box
 from utils.torch_utils import (TracedModel, load_classifier, select_device,
                                time_synchronized)
@@ -27,12 +27,14 @@ from utils.torch_utils import (TracedModel, load_classifier, select_device,
 class YoloV7:
     def __init__(self):
         self.has_mark_no_count_points = False
+
     def Draw_Circle(self, event, x, y, flags, param):
         # 用於透視變形取點
         if event == cv2.EVENT_LBUTTONDBLCLK:
             cv2.circle(param["img"], (x, y), 3, (0, 255, 255), -1)
             param["point_x"].append(x)
             param["point_y"].append(y)
+
     def Mark_No_Count_Point(self, image, frame_width, frame_height):
         # 點選透視變形位置, 順序為:左上,左下,右下,右上
         PT_data = {"img": image.copy(), "point_x": [], "point_y": []}
@@ -116,7 +118,6 @@ class YoloV7:
         else:
             dataset = LoadImages(source, img_size=imgsz, stride=stride)
 
-
         # Get names and colors
         names = model.module.names if hasattr(model, "module") else model.names
         # colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
@@ -194,102 +195,123 @@ class YoloV7:
                 )  # img.txt
 
                 gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
-                if len(det):
-                    # Rescale boxes from img_size to im0 size
-                    det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
+                if opt.draw_ball_path != "":
+                    draw_ball_txt_path = os.path.join(opt.draw_ball_path, "labels", p.stem) + (
+                        "" if dataset.mode == "image" else f"_{frame}"
+                    )  # img.txt
+                    with open(draw_ball_txt_path + ".txt", "r") as file:
+                        for line in file:
+                            parts = line.strip().split()
+                            cls = int(parts[0])  # 轉換為整數
+                            xywh = list(map(float, parts[1:5]))  # 轉換為浮點數列表
+                            conf = float(parts[5])  # 轉換為浮點數
 
-                    # Print results
-                    for c in det[:, -1].unique():
-                        n = (det[:, -1] == c).sum()  # detections per class
-                        s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
+                            # draw
+                            label = f"{names[int(cls)]} {conf:.2f}"
+                            xyxy = (xywh2xyxy(torch.tensor(xywh).view(1, 4)) * gn).view(-1).tolist()
+                            plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
+                else:
+                    if len(det):
+                        # Rescale boxes from img_size to im0 size
+                        det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
 
-                    # Write results
-                    most_confidence = -1
-                    most_confidence_ball_xyxy = None
-                    for *xyxy, conf, cls in reversed(det):
-                        if only_ball:
-                            if int(cls) != 0:
-                                continue
+                        # Print results
+                        for c in det[:, -1].unique():
+                            n = (det[:, -1] == c).sum()  # detections per class
+                            s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
-                        # 判斷boundaries
-                        xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        if cls == 0:  # ball boundaries
-                            if opt.ball_top_boundary != "":
-                                numerator, denominator = map(int, opt.ball_top_boundary.split("/"))
-                                if xywh[1] < (numerator / denominator):  # y軸在界線之上
-                                    continue
-                            if opt.ball_botton_boundary != "":
-                                numerator, denominator = map(int, opt.ball_botton_boundary.split("/"))
-                                if xywh[1] > (numerator / denominator):  # y軸在界線之下
-                                    continue
-                            ball_center = [xywh[0], xywh[1]]
-                            if self.has_mark_no_count_points and self.polygon_path.contains_point(ball_center):
-                                continue
-                        if cls == 1:  # person boundaries
-                            if opt.person_left_boundary != "" and opt.person_right_boundary != "":
-                                left_numerator, left_denominator = map(int, opt.person_left_boundary.split("/"))
-                                right_numerator, right_denominator = map(int, opt.person_right_boundary.split("/"))
-                                if xywh[0] > (left_numerator / left_denominator) and xywh[0] < (
-                                    right_numerator / right_denominator
-                                ):  # x軸在正中間的
-                                    continue
-                            if opt.person_top_boundary != "":
-                                numerator, denominator = map(int, opt.person_top_boundary.split("/"))
-                                if xywh[1] < (numerator / denominator):  # y軸在界線之上
-                                    continue
-                            if opt.person_botton_boundary != "":
-                                numerator, denominator = map(int, opt.person_botton_boundary.split("/"))
-                                if xywh[1] > (numerator / denominator):  # y軸在界線之下
-                                    continue
-                        if cls == 2:  # table boundaries
-                            if opt.table_top_boundary != "":
-                                numerator, denominator = map(int, opt.table_top_boundary.split("/"))
-                                if xywh[1] < (numerator / denominator):  # y軸在界線之上
-                                    continue
-                            if opt.table_botton_boundary != "":
-                                numerator, denominator = map(int, opt.table_botton_boundary.split("/"))
-                                if xywh[1] > (numerator / denominator):  # y軸在界線之下
+                        # Write results
+                        most_confidence = -1
+                        most_confidence_ball_xyxy = None
+                        for *xyxy, conf, cls in reversed(det):
+                            if only_ball:
+                                if int(cls) != 0:
                                     continue
 
-                        if opt.only_one_ball:
-                            if int(cls) == 0:
-                                if conf > most_confidence:
-                                    most_confidence = conf
-                                    most_confidence_ball_xyxy = xyxy
+                            # 判斷boundaries
+                            xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
+                            if cls == 0:  # ball boundaries
+                                if opt.ball_top_boundary != "":
+                                    numerator, denominator = map(int, opt.ball_top_boundary.split("/"))
+                                    if xywh[1] < (numerator / denominator):  # y軸在界線之上
+                                        continue
+                                if opt.ball_botton_boundary != "":
+                                    numerator, denominator = map(int, opt.ball_botton_boundary.split("/"))
+                                    if xywh[1] > (numerator / denominator):  # y軸在界線之下
+                                        continue
+                                ball_center = [xywh[0], xywh[1]]
+                                if self.has_mark_no_count_points and self.polygon_path.contains_point(ball_center):
+                                    continue
+                            if cls == 1:  # person boundaries
+                                if opt.person_left_boundary != "" and opt.person_right_boundary != "":
+                                    left_numerator, left_denominator = map(int, opt.person_left_boundary.split("/"))
+                                    right_numerator, right_denominator = map(int, opt.person_right_boundary.split("/"))
+                                    if xywh[0] > (left_numerator / left_denominator) and xywh[0] < (
+                                        right_numerator / right_denominator
+                                    ):  # x軸在正中間的
+                                        continue
+                                if opt.person_top_boundary != "":
+                                    numerator, denominator = map(int, opt.person_top_boundary.split("/"))
+                                    if xywh[1] < (numerator / denominator):  # y軸在界線之上
+                                        continue
+                                if opt.person_botton_boundary != "":
+                                    numerator, denominator = map(int, opt.person_botton_boundary.split("/"))
+                                    if xywh[1] > (numerator / denominator):  # y軸在界線之下
+                                        continue
+                            if cls == 2:  # table boundaries
+                                if opt.table_top_boundary != "":
+                                    numerator, denominator = map(int, opt.table_top_boundary.split("/"))
+                                    if xywh[1] < (numerator / denominator):  # y軸在界線之上
+                                        continue
+                                if opt.table_botton_boundary != "":
+                                    numerator, denominator = map(int, opt.table_botton_boundary.split("/"))
+                                    if xywh[1] > (numerator / denominator):  # y軸在界線之下
+                                        continue
 
-                        if save_txt:  # Write to file
-                            if not opt.only_one_ball or int(cls) != 0:
-                                xywh = (
-                                    (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()
-                                )  # normalized xywh
-                                line = (cls, *xywh, conf) if opt.save_conf else (cls, *xywh)  # label format
-                                with open(txt_path + ".txt", "a") as f:
-                                    f.write(("%g " * len(line)).rstrip() % line + "\n")
+                            if opt.only_one_ball:
+                                if int(cls) == 0:
+                                    if conf > most_confidence:
+                                        most_confidence = conf
+                                        most_confidence_ball_xyxy = xyxy
 
-                        if save_img or view_img:  # Add bbox to image
-                            if not opt.only_one_ball or int(cls) != 0:
-                                label = f"{names[int(cls)]} {conf:.2f}"
-                                plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
+                            if save_txt:  # Write to file
+                                if not opt.only_one_ball or int(cls) != 0:
+                                    xywh = (
+                                        (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()
+                                    )  # normalized xywh
+                                    line = (cls, *xywh, conf) if opt.save_conf else (cls, *xywh)  # label format
+                                    with open(txt_path + ".txt", "a") as f:
+                                        f.write(("%g " * len(line)).rstrip() % line + "\n")
 
-                    # 紀錄出信心最高的那一顆球
-                    if (
-                        opt.only_one_ball and save_txt and most_confidence != -1 and most_confidence_ball_xyxy != None
-                    ):  # Add bbox to image
-                        xywh = (
-                            (xyxy2xywh(torch.tensor(most_confidence_ball_xyxy).view(1, 4)) / gn).view(-1).tolist()
-                        )  # normalized xywh
-                        line = (int(0), *xywh, most_confidence) if opt.save_conf else (int(0), *xywh)  # label format
-                        with open(txt_path + ".txt", "a") as f:
-                            f.write(("%g " * len(line)).rstrip() % line + "\n")
+                            if save_img or view_img:  # Add bbox to image
+                                if not opt.only_one_ball or int(cls) != 0:
+                                    label = f"{names[int(cls)]} {conf:.2f}"
+                                    plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
 
-                    # 指畫出信心最高的那一顆球
-                    if (
-                        opt.only_one_ball and most_confidence != -1 and most_confidence_ball_xyxy != None
-                    ):  # Add bbox to image
-                        label = f"{names[int(0)]} {most_confidence:.2f}"
-                        plot_one_box(
-                            most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=1
-                        )
+                        # 紀錄出信心最高的那一顆球
+                        if (
+                            opt.only_one_ball
+                            and save_txt
+                            and most_confidence != -1
+                            and most_confidence_ball_xyxy != None
+                        ):  # Add bbox to image
+                            xywh = (
+                                (xyxy2xywh(torch.tensor(most_confidence_ball_xyxy).view(1, 4)) / gn).view(-1).tolist()
+                            )  # normalized xywh
+                            line = (
+                                (int(0), *xywh, most_confidence) if opt.save_conf else (int(0), *xywh)
+                            )  # label format
+                            with open(txt_path + ".txt", "a") as f:
+                                f.write(("%g " * len(line)).rstrip() % line + "\n")
+
+                        # 指畫出信心最高的那一顆球
+                        if (
+                            opt.only_one_ball and most_confidence != -1 and most_confidence_ball_xyxy != None
+                        ):  # Add bbox to image
+                            label = f"{names[int(0)]} {most_confidence:.2f}"
+                            plot_one_box(
+                                most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=1
+                            )
 
                 # Print time (inference + NMS)
                 print(f"{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS")
@@ -367,6 +389,7 @@ if __name__ == "__main__":
     parser.add_argument("--table-top-boundary", default="", help="table boundary")
     parser.add_argument("--table-botton-boundary", default="", help="table boundary")
     parser.add_argument("--only-one-ball", action="store_true", help="predict ball only the hightest prediction")
+    parser.add_argument("--draw-ball-path", default="", help="draw ball label path")
     opt = parser.parse_args()
     print(opt)
     # check_requirements(exclude=('pycocotools', 'thop'))

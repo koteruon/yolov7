@@ -162,18 +162,19 @@ class Ball:
 
 
 class BallTracker:
-    def __init__(self):
+    def __init__(self, show_debug_output=False):
         self.balls = []  # 儲存所有球的資訊
         self.balls_history = []  # 儲存歷史所有球的資訊
         self.ball_count = 0
         self.colormap = plt.get_cmap("Paired")  # 选择一个 colormap
-        self.score_threshold = 0.5  # 分數筏值
-        self.count_ball_threahold = 15  # 有多少個歷史軌跡內才算發球
+        self.score_threshold = 0.5  # 分數筏值 0.5
+        self.count_ball_threahold = 40  # 60fps = 15 # 有多少個歷史軌跡內才算發球
         self.count_ball_add_last_frame_number = 0  # 最後一個紀錄到發球軌跡的frame number
         self.count_balls = []  # 發球追蹤中
-        self.count_ball_reset_threahold = 200  # 幾個frame之後都沒有增加球就reset
+        self.count_ball_reset_threahold = 150  # 幾個frame之後都沒有增加球就reset
         self.count_ball_rounds = 1
         self.count_ball_score = {}  # key: round, value: (score)
+        self.show_debug_output = show_debug_output
 
     def set_add_ball_polygon_path(self, add_ball_polygon_path):
         self.add_ball_polygon_path = add_ball_polygon_path
@@ -238,12 +239,14 @@ class BallTracker:
         return misses
 
     def get_dynamic_color_bgr_255(self, index):
-        # num_colors = self.colormap.N
-        # color = self.colormap(index % num_colors)
-        # color_rgb = to_rgb(color)
-        # color_bgr = np.array(color_rgb)[::-1]
-        # color_bgr_255 = (color_bgr * 255).astype(np.uint8)
-        color_bgr_255 = [(0, 255, 255), (200, 200, 200)]
+        if self.show_debug_output:
+            num_colors = self.colormap.N
+            color = self.colormap(index % num_colors)
+            color_rgb = to_rgb(color)
+            color_bgr = np.array(color_rgb)[::-1]
+            color_bgr_255 = (color_bgr * 255).astype(np.uint8)
+        else:
+            color_bgr_255 = [(0, 255, 255), (200, 200, 200)]
         return color_bgr_255
 
     def set_frame_info(self, frame_width, frame_height):
@@ -305,7 +308,7 @@ class BallTracker:
                 direction_similarity = (
                     np.dot(ball.average_direction, (center - ball.average_center))
                     / (np.linalg.norm(ball.average_direction) * np.linalg.norm(center - ball.average_center))
-                    if np.linalg.norm(ball.average_direction) != 0
+                    if np.linalg.norm(ball.average_direction) != 0 and np.linalg.norm(center - ball.average_center) != 0
                     else 0
                 )
                 direction_similarity = max(-1, min(1, direction_similarity))  # 保證方向相似度在 [0, 1] 範圍內
@@ -894,8 +897,8 @@ class Trajectory:
         # 點選透視變形位置, 順序為:左上,左下,右下,右上
         PT_data = {"img": image.copy(), "point_x": [], "point_y": [], "color": (0, 255, 255)}
         # TODO: 測試用
-        PT_data["point_x"] = [508, 163, 1905, 1555]
-        PT_data["point_y"] = [679, 827, 849, 686]
+        PT_data["point_x"] = [523, 205, 1917, 1581]
+        PT_data["point_y"] = [662, 806, 814, 668]
         # TODO 測試用
         # cv2.namedWindow("PIC2 (press Q to quit)", 0)
         # cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
@@ -939,8 +942,8 @@ class Trajectory:
         # 框選發球機可增加球的位置，順序為:左上,左下,右下,右上
         PT_data = {"img": image.copy(), "point_x": [], "point_y": [], "color": (0, 255, 128)}
         # TODO: 測試用
-        PT_data["point_x"] = [1546, 1552, 1716, 1707]
-        PT_data["point_y"] = [566, 704, 720, 564]
+        PT_data["point_x"] = [1633, 1629, 1786, 1784]
+        PT_data["point_y"] = [525, 725, 737, 526]
         # TODO 測試用
         # cv2.namedWindow("pitching maching (press Q to quit)", 0)
         # cv2.resizeWindow("pitching maching (press Q to quit)", frame_width, frame_height)
@@ -962,8 +965,8 @@ class Trajectory:
         # 框選發球機計算球的位置，順序為:左上,左下,右下,右上
         PT_data = {"img": image.copy(), "point_x": [], "point_y": [], "color": (255, 0, 0)}
         # TODO: 測試用
-        PT_data["point_x"] = [1335, 1356, 1585, 1573]
-        PT_data["point_y"] = [462, 838, 845, 460]
+        PT_data["point_x"] = [1185, 1175, 1330, 1341]
+        PT_data["point_y"] = [334, 803, 805, 330]
         # TODO 測試用
         # cv2.namedWindow("count ball (press Q to quit)", 0)
         # cv2.resizeWindow("count ball (press Q to quit)", frame_width, frame_height)
@@ -1027,15 +1030,28 @@ class Trajectory:
             ## 落點預測 ######################################################################################################
             if len(x_tmp) >= 3:
                 # 檢查是否嚴格遞增或嚴格遞減,(軌跡方向是否相同)
-                direction = self.Monotonic(x_tmp, strictly=False, half=True)
+                direction = self.Monotonic(x_tmp, strictly=False, half=False)
                 # 累積有三顆球的軌跡向右, 可計算拋物線
                 if direction == "right":
+                    bounced = False
                     x_c_pred, y_c_pred = ball.new_center
                     parabola = self.Solve_Parabola(x_tmp, y_tmp)
                     a, b, c = parabola[0]
                     fit = a * x_c_pred**2 + b * x_c_pred + c
                     # 差距 10 個 pixel 以上視為脫離預測的拋物線
-                    if abs(y_c_pred - fit) >= 10:
+                    bounced = abs(y_c_pred - fit) >= 10
+                    if not self.use_parabola:
+                        vy = np.diff(y_tmp)  # 計算速度（差分）計算最近 8 幀的垂直速度
+                        window_size = 2  # 平滑窗口大小，可根據需要調整
+                        smoothed_vy = np.convolve(
+                            vy, np.ones(window_size) / window_size, mode="valid"
+                        )  # 平滑速度數據（移動平均）
+                        ay = np.diff(vy)
+                        if smoothed_vy[0] >= 0 and smoothed_vy[-1] < 0 and ay[-1] < 0.5:  # 閾值可調
+                            bounced = True
+                        else:
+                            bounced = False
+                    if bounced:
                         x_last = x_tmp[-2]
                         # 預測球在球桌上的落點, x_drop : 本次與前次的中點, y_drop : x_drop 於拋物線上的位置
                         x_drop = int(round((x_c_pred + x_last) / 2, 0))
@@ -1091,78 +1107,91 @@ class Trajectory:
                     self.frame_width - (self.miniboard_width + self.miniboard_edge * 2) :,
                 ] = self.img_opt
 
-        self.freetype.putText(
-            image_CV,
-            f"幀數: {self.count}",
-            (10, 20),
-            36,
-            (0, 255, 255),
-            -1,
-            cv2.LINE_AA,
-            False,
-        )
-        self.freetype.putText(
-            image_CV,
-            f"回合數: {self.ball_tracker.count_ball_rounds}",
-            (10, 70),
-            36,
-            (0, 255, 255),
-            -1,
-            cv2.LINE_AA,
-            False,
-        )
-        self.freetype.putText(
-            image_CV,
-            f"發球數: {self.ball_tracker.count_ball_size()}",
-            (10, 120),
-            36,
-            (0, 255, 255),
-            -1,
-            cv2.LINE_AA,
-            False,
-        )
-        self.freetype.putText(
-            image_CV,
-            f"有效擊球: {self.ball_tracker.count_ball_valid_hits()}",
-            (10, 170),
-            36,
-            (0, 255, 0),
-            -1,
-            cv2.LINE_AA,
-            False,
-        )
+        if self.show_debug_output:
+            for idx, ball in enumerate(self.ball_tracker.balls, 1):
+                cv2.putText(
+                    image_CV,
+                    f"Score : {ball.score_history[-1]:.2f}",
+                    (10, 40 + 40 * idx),
+                    cv2.FONT_HERSHEY_TRIPLEX,
+                    1,
+                    tuple(map(int, ball.color_bgr_255)),
+                    1,
+                    cv2.LINE_AA,
+                )
+        else:
+            self.freetype.putText(
+                image_CV,
+                f"幀數: {self.count}",
+                (10, 20),
+                36,
+                (0, 255, 255),
+                -1,
+                cv2.LINE_AA,
+                False,
+            )
+            self.freetype.putText(
+                image_CV,
+                f"回合數: {self.ball_tracker.count_ball_rounds}",
+                (10, 70),
+                36,
+                (0, 255, 255),
+                -1,
+                cv2.LINE_AA,
+                False,
+            )
+            self.freetype.putText(
+                image_CV,
+                f"發球數: {self.ball_tracker.count_ball_size()}",
+                (10, 120),
+                36,
+                (0, 255, 255),
+                -1,
+                cv2.LINE_AA,
+                False,
+            )
+            self.freetype.putText(
+                image_CV,
+                f"有效擊球: {self.ball_tracker.count_ball_valid_hits()}",
+                (10, 170),
+                36,
+                (0, 255, 0),
+                -1,
+                cv2.LINE_AA,
+                False,
+            )
 
-        if self.analysis_output:
-            self.freetype.putText(
-                image_CV,
-                f"錯誤落點: {self.ball_tracker.count_ball_side_errors()}",
-                (10, 220),
-                36,
-                (80, 127, 255),
-                -1,
-                cv2.LINE_AA,
-                False,
-            )
-            self.freetype.putText(
-                image_CV,
-                f"擊球出界: {self.ball_tracker.count_ball_out_hits()}",
-                (10, 270),
-                36,
-                (0, 0, 255),
-                -1,
-                cv2.LINE_AA,
-                False,
-            )
-            self.freetype.putText(
-                image_CV,
-                f"未擊中: {self.ball_tracker.count_ball_misses()}",
-                (10, 320),
-                36,
-                (0, 0, 255),
-                -1,
-                cv2.LINE_AA,
-                False,
-            )
+            if self.analysis_output:
+                self.freetype.putText(
+                    image_CV,
+                    f"錯誤落點: {self.ball_tracker.count_ball_side_errors()}",
+                    (10, 220),
+                    36,
+                    (80, 127, 255),
+                    -1,
+                    cv2.LINE_AA,
+                    False,
+                )
+                self.freetype.putText(
+                    image_CV,
+                    f"擊球出界: {self.ball_tracker.count_ball_out_hits()}",
+                    (10, 270),
+                    36,
+                    (0, 0, 255),
+                    -1,
+                    cv2.LINE_AA,
+                    False,
+                )
+                self.freetype.putText(
+                    image_CV,
+                    f"未擊中: {self.ball_tracker.count_ball_misses()}",
+                    (10, 320),
+                    36,
+                    (0, 0, 255),
+                    -1,
+                    cv2.LINE_AA,
+                    False,
+                )
 
         # 比分
         score = self.ball_tracker.count_ball_get_score()
@@ -1211,7 +1240,7 @@ class Trajectory:
 
         # 影片跟目錄
         max_num = -1
-        max_folder = ""  # realtime3
+        max_folder = "pitching_machine_20241223"  # realtime3
         root_path = f"./runs/detect"
         pattern = re.compile(r"^realtime(\d+)$")
         if max_folder == "":
@@ -1224,9 +1253,9 @@ class Trajectory:
                         max_folder = folder_name
         root_path = os.path.join(root_path, max_folder)
         sub_max_num = -1
-        sub_max_folder = ""  # Realtime
+        sub_max_folder = None  # "" = Realtime
         sub_pattern = re.compile(r"^Realtime(\d+)$")
-        if sub_max_folder == "":
+        if sub_max_folder != None and sub_max_folder == "":
             for folder_name in os.listdir(root_path):
                 match = sub_pattern.match(folder_name)
                 if match:
@@ -1234,10 +1263,11 @@ class Trajectory:
                     if num > sub_max_num:
                         sub_max_num = num
                         sub_max_folder = folder_name
-        root_path = os.path.join(root_path, sub_max_folder)
+        if sub_max_folder != None:
+            root_path = os.path.join(root_path, sub_max_folder)
         print(f"root_path: {root_path}")
 
-        video_fullname = "Realtime.mp4"
+        video_fullname = "C0099_1000_1660.mp4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
         self.input_path = os.path.join(root_path, video_fullname)
@@ -1256,7 +1286,8 @@ class Trajectory:
             self.speed_distribution_path,
         ) = self.Create_Output_Dir(output_path, self.video_name)
 
-        self.video_path = os.path.join(self.video_path, max_folder, sub_max_folder)
+        if sub_max_folder != None:
+            self.video_path = os.path.join(self.video_path, max_folder, sub_max_folder)
         Path(self.video_path).mkdir(parents=True, exist_ok=True)
 
         # yolo labels path
@@ -1307,11 +1338,13 @@ class Trajectory:
             self.Draw_SpeedHist(save=False, show=True)
             self.video_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-        self.ball_tracker = BallTracker()
-
-        self.analysis_output = False
+        self.analysis_output = True
+        self.show_debug_output = False
+        self.use_parabola = False
         self.freetype = cv2.freetype.createFreeType2()
         self.freetype.loadFontData(fontFileName="ttf/MSJH.TTC", id=0)
+
+        self.ball_tracker = BallTracker(self.show_debug_output)
 
     def Set_Frame_Info(self, frame_height, frame_width, framerate):
         self.frame_height = frame_height
