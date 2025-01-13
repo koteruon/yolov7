@@ -15,6 +15,9 @@ ffmpeg -i input.mp4 -vf setpts=4*PTS -r 30 output.mp4
 # 循環播放影片到 /dev/video0
 ffmpeg -re -stream_loop -1 -i /home/chaoen/yoloNhit_calvin/yolov7/inference/videos/C0086.MP4 -map 0:v -f v4l2 /dev/video0
 
+mkfifo /home/chaoen/my_fifo
+ffmpeg -re -stream_loop -1 -i /home/chaoen/yoloNhit_calvin/yolov7/inference/videos/C0086.MP4 -map 0:v -f mpegts -c:v libx264 -fifo_size 10M /home/chaoen/my_fifo
+
 # yolo 訓練
 ## 記得更改data/coco.yaml
 python train.py --workers 4 --batch-size 3 --data data/coco_only_ball.yaml --img 960 960 --cfg cfg/training/yolov7-e6e.yaml --weights ./weights/yolov7-e6e --name yolov7-e6e_20240313 --hyp data/hyp.scratch.custom.yaml

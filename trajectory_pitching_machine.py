@@ -167,7 +167,7 @@ class BallTracker:
         self.balls_history = []  # 儲存歷史所有球的資訊
         self.ball_count = 0
         self.colormap = plt.get_cmap("Paired")  # 选择一个 colormap
-        self.score_threshold = 0.5  # 分數筏值 0.5
+        self.score_threshold = 0.45  # 分數筏值 0.5
         self.count_ball_threahold = 40  # 60fps = 15 # 有多少個歷史軌跡內才算發球
         self.count_ball_add_last_frame_number = 0  # 最後一個紀錄到發球軌跡的frame number
         self.count_balls = []  # 發球追蹤中
@@ -899,6 +899,8 @@ class Trajectory:
         # TODO: 測試用
         PT_data["point_x"] = [523, 205, 1917, 1581]
         PT_data["point_y"] = [662, 806, 814, 668]
+        # PT_data["point_x"] = [543, 205, 1917, 1555]  # C0099_2500_3200
+        # PT_data["point_y"] = [645, 806, 811, 650]  # C0099_2500_3200
         # TODO 測試用
         # cv2.namedWindow("PIC2 (press Q to quit)", 0)
         # cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
@@ -1042,7 +1044,7 @@ class Trajectory:
                     bounced = abs(y_c_pred - fit) >= 10
                     if not self.use_parabola:
                         vy = np.diff(y_tmp)  # 計算速度（差分）計算最近 8 幀的垂直速度
-                        window_size = 2  # 平滑窗口大小，可根據需要調整
+                        window_size = 1  # 平滑窗口大小，可根據需要調整
                         smoothed_vy = np.convolve(
                             vy, np.ones(window_size) / window_size, mode="valid"
                         )  # 平滑速度數據（移動平均）
@@ -1240,7 +1242,7 @@ class Trajectory:
 
         # 影片跟目錄
         max_num = -1
-        max_folder = "pitching_machine_20241223"  # realtime3
+        max_folder = "C0099_4000_4900"  # realtime3
         root_path = f"./runs/detect"
         pattern = re.compile(r"^realtime(\d+)$")
         if max_folder == "":
@@ -1267,7 +1269,7 @@ class Trajectory:
             root_path = os.path.join(root_path, sub_max_folder)
         print(f"root_path: {root_path}")
 
-        video_fullname = "C0099_1000_1660.mp4"
+        video_fullname = "C0099_4000_4900.mp4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
         self.input_path = os.path.join(root_path, video_fullname)

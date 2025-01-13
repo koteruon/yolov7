@@ -15,13 +15,21 @@ from keypoints_detection import KeyPointDetection
 from models.experimental import attempt_load
 from process_videos import ProcessVideos
 from utils.datasets import LoadCamera, LoadImages, LoadStreams
-from utils.general import (apply_classifier, check_img_size, check_imshow,
-                           check_requirements, increment_path,
-                           non_max_suppression, scale_coords, set_logging,
-                           strip_optimizer, xywh2xyxy, xyxy2xywh)
+from utils.general import (
+    apply_classifier,
+    check_img_size,
+    check_imshow,
+    check_requirements,
+    increment_path,
+    non_max_suppression,
+    scale_coords,
+    set_logging,
+    strip_optimizer,
+    xywh2xyxy,
+    xyxy2xywh,
+)
 from utils.plots import plot_one_box
-from utils.torch_utils import (TracedModel, load_classifier, select_device,
-                               time_synchronized)
+from utils.torch_utils import TracedModel, load_classifier, select_device, time_synchronized
 
 
 class YoloV7:
@@ -186,7 +194,7 @@ class YoloV7:
                 # Save original image
                 if save_ori_img:
                     im0_origin = im0.copy()
-                    clip_path = str(save_dir / "clips" / "test" / p.stem / f"{frame}") + ".jpg"  # 0.jpg
+                    clip_path = str(save_dir / "clips" / "test" / p.stem / f"{p.stem}_{frame}") + ".jpg"  # 0.jpg
                     os.makedirs(os.path.dirname(clip_path), exist_ok=True)
                     cv2.imwrite(clip_path, im0_origin)
 
