@@ -171,7 +171,7 @@ class BallTracker:
         self.count_ball_threahold = 15  # 60fps = 15, 120fps = 40 # 有多少個歷史軌跡內才算發球
         self.count_ball_add_last_frame_number = 0  # 最後一個紀錄到發球軌跡的frame number
         self.count_balls = []  # 發球追蹤中
-        self.count_ball_reset_threahold = 150  # 幾個frame之後都沒有增加球就reset
+        self.count_ball_reset_threahold = 75  # 幾個frame之後都沒有增加球就reset
         self.count_ball_rounds = 1
         self.count_ball_score = {}  # key: round, value: (score)
         self.show_debug_output = show_debug_output
