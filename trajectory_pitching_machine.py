@@ -168,7 +168,7 @@ class BallTracker:
         self.ball_count = 0
         self.colormap = plt.get_cmap("Paired")  # 选择一个 colormap
         self.score_threshold = 0.45  # 分數筏值 0.5
-        self.count_ball_threahold = 40  # 60fps = 15 # 有多少個歷史軌跡內才算發球
+        self.count_ball_threahold = 15  # 60fps = 15, 120fps = 40 # 有多少個歷史軌跡內才算發球
         self.count_ball_add_last_frame_number = 0  # 最後一個紀錄到發球軌跡的frame number
         self.count_balls = []  # 發球追蹤中
         self.count_ball_reset_threahold = 150  # 幾個frame之後都沒有增加球就reset
@@ -863,13 +863,19 @@ class Trajectory:
 
         # 讀取影片
         cap = cv2.VideoCapture(input_path)
-        success, image = cap.read()
+        n = 0
+        while True:
+            n += 1
+            cap.grab()
+            if n == self.step:
+                success, image = cap.retrieve()
+                break
         if not success:
             raise Exception("Could not read")
 
-        framerate = int(cap.get(cv2.CAP_PROP_FPS))
+        framerate = round(int(cap.get(cv2.CAP_PROP_FPS)) / self.step)
         frame_height, frame_width = int(cap.get(4)), int(cap.get(3))
-        total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT) // self.step
 
         return success, image, cap, framerate, frame_height, frame_width, total_frames
 
@@ -1232,7 +1238,7 @@ class Trajectory:
             print(self.count)
         return image
 
-    def __init__(self, real_time=False):
+    def __init__(self, real_time=False, step=1):
 
         # temp#
         self.only_speed = False
@@ -1242,7 +1248,7 @@ class Trajectory:
 
         # 影片跟目錄
         max_num = -1
-        max_folder = "C0099_4000_4900"  # realtime3
+        max_folder = "C0099_1000_1660_step_2"  # realtime3
         root_path = f"./runs/detect"
         pattern = re.compile(r"^realtime(\d+)$")
         if max_folder == "":
@@ -1269,7 +1275,7 @@ class Trajectory:
             root_path = os.path.join(root_path, sub_max_folder)
         print(f"root_path: {root_path}")
 
-        video_fullname = "C0099_4000_4900.mp4"
+        video_fullname = "C0099_1000_1660.mp4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
         self.input_path = os.path.join(root_path, video_fullname)
@@ -1314,7 +1320,7 @@ class Trajectory:
         # 參數
         self.bounce_location_list = np.zeros((4, 3), dtype=int)
         self.bouncing_offset_x, self.bouncing_offset_y = 10, 15  # bouncing location offset
-        self.count = 1  # 記錄處理幾個 Frame
+        self.count = 1  # 記錄處理幾個 Frame (從step開始)
 
         # 顯示參數
         self.is_show_bounce = True
@@ -1348,6 +1354,8 @@ class Trajectory:
 
         self.ball_tracker = BallTracker(self.show_debug_output)
 
+        self.step = step
+
     def Set_Frame_Info(self, frame_height, frame_width, framerate):
         self.frame_height = frame_height
         self.frame_width = frame_width
@@ -1359,6 +1367,8 @@ class Trajectory:
 
     ### 後處理從此開始 ###
     def main(self):
+        start = time.time()
+
         # 讀影片
         success, image, cap, framerate, frame_height, frame_width, total_frames = self.Read_Video(self.input_path)
         self.Set_Frame_Info(frame_height, frame_width, framerate)
@@ -1368,14 +1378,13 @@ class Trajectory:
         size = (int(self.WIDTH * ratio), int(self.HEIGHT * ratio))
 
         # 寫 預測結果
-        video_path = f"{self.video_path}/{self.video_name}_predict_12.mp4"
+        video_path = f"{self.video_path}/{self.video_name}_step_{self.step}_predict_12.mp4"
         output = self.Write_Video(video_path, size)
 
         # 透視變形
         self.Mark_Perspective_Distortion_Point(image, self.frame_width, self.frame_height)
 
         # 針對每一貞做運算
-        start = time.time()
         batch = 12
         n = 4
         k = batch // 2
@@ -1390,7 +1399,14 @@ class Trajectory:
                     break
                 output.write(image_CV)
                 pbar.update(1)
-                success, image = cap.read()
+
+                n = 0
+                while True:
+                    n += 1
+                    cap.grab()
+                    if n == self.step:
+                        success, image = cap.retrieve()
+                        break
 
         # For releasing cap and out.
         cap.release()
@@ -1407,15 +1423,16 @@ class Trajectory:
         self.Save_Bounce_Location()
 
         end = time.time()
-        print(f"Write video time: {end-start} seconds.")
         total_time = end - start
 
-        print()
         print(f"Detect Result is saved in {self.video_path}")
         print(f"Total time: {total_time} seconds")
         print(f"Done......")
 
 
 if __name__ == "__main__":
-    trajectory = Trajectory()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--step", type=int, default=1, help="step number")
+    opt = parser.parse_args()
+    trajectory = Trajectory(step=opt.step)
     trajectory.main()
