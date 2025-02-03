@@ -261,7 +261,8 @@ class YoloV7:
                         cv2.putText(
                             im0, "STAND BY", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (34, 139, 34), 2, cv2.LINE_AA
                         )
-                    cv2.imshow("Realtime Trajectory", im0)
+                    if view_img:
+                        cv2.imshow("Realtime Trajectory", im0)
 
                 # Print time (inference + NMS)
                 print(

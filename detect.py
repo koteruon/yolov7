@@ -117,14 +117,14 @@ class YoloV7:
             view_img = check_imshow()
             # view_img = False
             cudnn.benchmark = True  # set True to speed up constant image size inference
-            dataset = LoadCamera(source, img_size=imgsz, stride=stride)
+            dataset = LoadCamera(source, img_size=imgsz, stride=stride, step=opt.step)
             process_video = ProcessVideos()
         elif webcam:
             view_img = check_imshow()
             cudnn.benchmark = True  # set True to speed up constant image size inference
-            dataset = LoadStreams(source, img_size=imgsz, stride=stride)
+            dataset = LoadStreams(source, img_size=imgsz, stride=stride, step=opt.step)
         else:
-            dataset = LoadImages(source, img_size=imgsz, stride=stride)
+            dataset = LoadImages(source, img_size=imgsz, stride=stride, step=opt.step)
 
         # Get names and colors
         names = model.module.names if hasattr(model, "module") else model.names
@@ -340,7 +340,7 @@ class YoloV7:
                             if isinstance(vid_writer, cv2.VideoWriter):
                                 vid_writer.release()  # release previous video writer
                             if vid_cap:  # video
-                                fps = vid_cap.get(cv2.CAP_PROP_FPS)
+                                fps = round(vid_cap.get(cv2.CAP_PROP_FPS) / opt.step)
                                 w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                                 h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                             else:  # stream
@@ -398,6 +398,7 @@ if __name__ == "__main__":
     parser.add_argument("--table-botton-boundary", default="", help="table boundary")
     parser.add_argument("--only-one-ball", action="store_true", help="predict ball only the hightest prediction")
     parser.add_argument("--draw-ball-path", default="", help="draw ball label path")
+    parser.add_argument("--step", type=int, default=1, help="step number")
     opt = parser.parse_args()
     print(opt)
     # check_requirements(exclude=('pycocotools', 'thop'))

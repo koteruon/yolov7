@@ -21,23 +21,14 @@ import torch.nn.functional as F
 from PIL import ExifTags, Image
 from torch.utils.data import Dataset
 from torchvision.ops import ps_roi_align, ps_roi_pool, roi_align, roi_pool
-
 # from pycocotools import mask as maskUtils
 from torchvision.utils import save_image
 from tqdm import tqdm
 
 from trajectory import Trajectory
-from utils.general import (
-    check_requirements,
-    clean_str,
-    resample_segments,
-    segment2box,
-    segments2boxes,
-    xyn2xy,
-    xywh2xyxy,
-    xywhn2xyxy,
-    xyxy2xywh,
-)
+from utils.general import (check_requirements, clean_str, resample_segments,
+                           segment2box, segments2boxes, xyn2xy, xywh2xyxy,
+                           xywhn2xyxy, xyxy2xywh)
 from utils.torch_utils import torch_distributed_zero_first
 
 # Parameters
@@ -158,7 +149,7 @@ class _RepeatSampler(object):
 
 
 class LoadImages:  # for inference
-    def __init__(self, path, img_size=640, stride=32):
+    def __init__(self, path, img_size=640, stride=32, step=1):
         p = str(Path(path).absolute())  # os-agnostic absolute path
         if "*" in p:
             files = sorted(glob.glob(p, recursive=True))  # glob
@@ -175,6 +166,7 @@ class LoadImages:  # for inference
 
         self.img_size = img_size
         self.stride = stride
+        self.step = step
         self.files = images + videos
         self.nf = ni + nv  # number of files
         self.video_flag = [False] * ni + [True] * nv
@@ -200,16 +192,22 @@ class LoadImages:  # for inference
         if self.video_flag[self.count]:
             # Read video
             self.mode = "video"
-            ret_val, img0 = self.cap.read()
-            if not ret_val:
-                self.count += 1
-                self.cap.release()
-                if self.count == self.nf:  # last video
-                    raise StopIteration
-                else:
-                    path = self.files[self.count]
-                    self.new_video(path)
-                    ret_val, img0 = self.cap.read()
+            n = 0
+            while True:
+                n += 1
+                self.cap.grab()
+                if n == self.step:
+                    ret_val, img0 = self.cap.retrieve()
+                    if not ret_val:
+                        self.count += 1
+                        self.cap.release()
+                        if self.count == self.nf:  # last video
+                            raise StopIteration
+                        else:
+                            path = self.files[self.count]
+                            self.new_video(path)
+                            ret_val, img0 = self.cap.read()
+                    break
 
             self.frame += 1
             print(f"video {self.count + 1}/{self.nf} ({self.frame}/{self.nframes}) {path}: ", end="")
@@ -233,7 +231,7 @@ class LoadImages:  # for inference
     def new_video(self, path):
         self.frame = 0
         self.cap = cv2.VideoCapture(path)
-        self.nframes = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.nframes = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)) // self.step
 
     def __len__(self):
         return self.nf  # number of files
@@ -308,6 +306,7 @@ class LoadCamera:  # for inference
         self,
         device,
         half,
+        step,
         source="/dev/video0",
         img_size=640,
         stride=32,
@@ -320,6 +319,7 @@ class LoadCamera:  # for inference
     ):
         self.device = device
         self.half = half
+        self.step = step
         self.source = source
         self.img_size = img_size
         self.stride = stride
@@ -357,10 +357,19 @@ class LoadCamera:  # for inference
         self.count = -1
         if self.model_choices == "tracknet" or self.model_choices == "tracknet_pytorch":
             for _ in range(12):
-                if self.opencv_or_ffmpeg == "opencv":
-                    ret_val, img0 = self.cap.read()
-                else:
-                    img0 = self.read_frame_from_ffmpeg()
+                n = 0
+                while True:
+                    n += 1
+                    if self.opencv_or_ffmpeg == "opencv":
+                        self.cap.grab()
+                    else:
+                        img0 = self.read_frame_from_ffmpeg()
+                    if n == self.step:
+                        if self.opencv_or_ffmpeg == "opencv":
+                            ret_val, img0 = self.cap.retrieve()
+                        else:
+                            img0 = self.read_frame_from_ffmpeg()
+                        break
                 img = cv2.cvtColor(img0, cv2.COLOR_BGR2GRAY)
                 img = self.normalization(img)
                 if self.tracknet_image_list is None:
@@ -455,7 +464,7 @@ class LoadCamera:  # for inference
 
 
 class LoadStreams:  # multiple IP or RTSP cameras
-    def __init__(self, sources="streams.txt", img_size=640, stride=32):
+    def __init__(self, sources="streams.txt", img_size=640, stride=32, step=4):
         self.mode = "stream"
         self.img_size = img_size
         self.stride = stride
@@ -485,7 +494,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
             self.fps = cap.get(cv2.CAP_PROP_FPS) % 100
 
             _, self.imgs[i] = cap.read()  # guarantee first frame
-            thread = Thread(target=self.update, args=([i, cap]), daemon=True)
+            thread = Thread(target=self.update, args=([i, cap, step]), daemon=True)
             print(f" success ({w}x{h} at {self.fps:.2f} FPS).")
             thread.start()
         print("")  # newline
@@ -496,14 +505,14 @@ class LoadStreams:  # multiple IP or RTSP cameras
         if not self.rect:
             print("WARNING: Different stream shapes detected. For optimal performance supply similarly-shaped streams.")
 
-    def update(self, index, cap):
+    def update(self, index, cap, step):
         # Read next stream frame in a daemon thread
         n = 0
         while cap.isOpened():
             n += 1
             # _, self.imgs[index] = cap.read()
             cap.grab()
-            if n == 4:  # read every 4th frame
+            if n == step:  # read every 4th frame
                 success, im = cap.retrieve()
                 self.imgs[index] = im if success else self.imgs[index] * 0
                 n = 0
