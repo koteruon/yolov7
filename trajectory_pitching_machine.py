@@ -890,14 +890,18 @@ class Trajectory:
             exit(1)
 
         # 寫 預測結果
-        output = cv2.VideoWriter(
+        self.output = cv2.VideoWriter(
             video_path,
             fourcc,
             self.framerate,
             size,
         )
 
-        return output
+    def Write_Frame_to_Video(self, image_CV):
+        self.output.write(image_CV)
+
+    def Release_Video(self):
+        self.output.release()
 
     def Mark_Perspective_Distortion_Point(self, image, frame_width, frame_height):
         # 點選透視變形位置, 順序為:左上,左下,右下,右上
@@ -993,16 +997,18 @@ class Trajectory:
         count_ball_point = np.float32([upper_left, lower_left, lower_right, upper_right])
         self.ball_tracker.set_count_ball_polygon_path(matplotlib_path(count_ball_point))
 
-    def Read_Yolo_Label_One_Frame(self, label_file):
-        balls = []
+    def Read_Yolo_Label_One_Frame(self, label_file=None, balls=None):
+        if balls == None:
+            balls = []
         # 取得Yolo預測球的位置
-        if os.path.exists(label_file):
-            with open(label_file, "r") as f:
-                for line in f:
-                    l = line.split()
-                    if len(l) > 0:
-                        if int(l[0]) == 0:
-                            balls.append(l)
+        if label_file:
+            if os.path.exists(label_file):
+                with open(label_file, "r") as f:
+                    for line in f:
+                        l = line.split()
+                        if len(l) > 0:
+                            if int(l[0]) == 0:
+                                balls.append(l)
 
         if balls:
             has_reset = self.ball_tracker.update_balls(balls, self.count)
@@ -1379,7 +1385,7 @@ class Trajectory:
 
         # 寫 預測結果
         video_path = f"{self.video_path}/{self.video_name}_step_{self.step}_predict_12.mp4"
-        output = self.Write_Video(video_path, size)
+        self.Write_Video(video_path, size)
 
         # 透視變形
         self.Mark_Perspective_Distortion_Point(image, self.frame_width, self.frame_height)
@@ -1397,7 +1403,7 @@ class Trajectory:
                 self.Next_Count()
                 if self.count >= total_frames - 12:
                     break
-                output.write(image_CV)
+                self.Write_Frame_to_Video(image_CV)
                 pbar.update(1)
 
                 n = 0
@@ -1410,7 +1416,7 @@ class Trajectory:
 
         # For releasing cap and out.
         cap.release()
-        output.release()
+        self.Release_Video()
 
         # write bouncing list to csv file
         self.Write_Bounce_Location()

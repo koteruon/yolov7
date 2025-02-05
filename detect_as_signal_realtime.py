@@ -143,6 +143,7 @@ class YoloV7:
             height=frame_height,
             width=frame_width,
             opencv_or_ffmpeg=opt.opencv_or_ffmpeg,
+            trajectory=True,
         )
         process_video = ProcessVideos()
 

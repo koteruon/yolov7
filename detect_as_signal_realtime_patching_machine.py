@@ -111,6 +111,7 @@ class YoloV7:
             width=frame_width,
             opencv_or_ffmpeg=opt.opencv_or_ffmpeg,
             trajectory=False,
+            trajectory_patching_machine=True,
         )
         process_video = ProcessVideos()
 
@@ -213,15 +214,26 @@ class YoloV7:
                             record_frame = 1
                             fps, w, h = 60, im0.shape[1], im0.shape[0]
                             vid_writer = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+                            if trajectory:
+                                output_video_path = str(sub_save_path / p.name) + "_predict_12.mp4"
+                                trajectory.Write_Video(output_video_path, (1080, 1920))
                             print("開始錄影...")
 
                     if key == ord("t"):
                         if is_recording:
+                            if trajectory:
+                                for text, video in tqdm(zip(text_buffer, video_buffer), desc="軌跡落點"):
+                                    trajectory.Read_Yolo_Label_One_Frame(balls=text.value())
+                                    image_CV = trajectory.Detect_Trajectory(im0)
+                                    image_CV = trajectory.Draw_On_Image(image_CV)
+                                    trajectory.Next_Count()
+                                    trajectory.Write_Frame_to_Video(image_CV)
                             for text in tqdm(list(text_buffer), desc="處理text資料"):
                                 for txt_path, lines in text.items():
-                                    with open(txt_path + ".txt", "a") as f:
-                                        for line in lines:
-                                            f.write(("%g " * len(line)).rstrip() % line + "\n")
+                                    if lines:
+                                        with open(txt_path + ".txt", "a") as f:
+                                            for line in lines:
+                                                f.write(("%g " * len(line)).rstrip() % line + "\n")
                             for video in tqdm(list(video_buffer), desc="處理video資料"):
                                 vid_writer.write(video)
                             vid_writer.release()
@@ -229,7 +241,7 @@ class YoloV7:
                             is_recording = False
                             print(f"錄影已儲存至 {video_path}")
 
-                    if key == ord("k"):  # 按下 'k' 模擬 Ctrl+C
+                    if key == ord("q"):  # 按下 'k' 模擬 Ctrl+C
                         if vid_writer is not None:
                             vid_writer.release()
                         cv2.destroyAllWindows()
@@ -253,9 +265,8 @@ class YoloV7:
                             im0, "RECORDING", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA
                         )
                         video_buffer.append(im0s)
-                        if lines:
-                            txt_path = str(text_dir / p.stem) + f"_{record_frame}"
-                            text_buffer.append({f"{txt_path}": lines})
+                        txt_path = str(text_dir / p.stem) + f"_{record_frame}"
+                        text_buffer.append({f"{txt_path}": lines})
                         record_frame += 1
                     else:
                         cv2.putText(

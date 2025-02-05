@@ -21,14 +21,24 @@ import torch.nn.functional as F
 from PIL import ExifTags, Image
 from torch.utils.data import Dataset
 from torchvision.ops import ps_roi_align, ps_roi_pool, roi_align, roi_pool
+
 # from pycocotools import mask as maskUtils
 from torchvision.utils import save_image
 from tqdm import tqdm
 
 from trajectory import Trajectory
-from utils.general import (check_requirements, clean_str, resample_segments,
-                           segment2box, segments2boxes, xyn2xy, xywh2xyxy,
-                           xywhn2xyxy, xyxy2xywh)
+from trajectory_pitching_machine import Trajectory as Trajectory_Patching_Machine
+from utils.general import (
+    check_requirements,
+    clean_str,
+    resample_segments,
+    segment2box,
+    segments2boxes,
+    xyn2xy,
+    xywh2xyxy,
+    xywhn2xyxy,
+    xyxy2xywh,
+)
 from utils.torch_utils import torch_distributed_zero_first
 
 # Parameters
@@ -302,6 +312,12 @@ class LoadCamera:  # for inference
         self.trajectory.Set_Frame_Info(frame_height, frame_width, self.fps)
         self.trajectory.Mark_Perspective_Distortion_Point(img0, frame_width, frame_height)
 
+    def trajectory_patchin_machine_init(self, img0):
+        self.trajectory_patching_machine = Trajectory_Patching_Machine()
+        frame_height, frame_width, frame_channel = img0.shape
+        self.trajectory_patching_machine.Set_Frame_Info(frame_height, frame_width, self.fps)
+        self.trajectory_patching_machine.Mark_Perspective_Distortion_Point(img0, frame_width, frame_height)
+
     def __init__(
         self,
         device,
@@ -315,7 +331,8 @@ class LoadCamera:  # for inference
         height=1920,
         width=1080,
         opencv_or_ffmpeg="opencv",
-        trajectory=True,
+        trajectory=False,
+        trajectory_patching_machine=False,
     ):
         self.device = device
         self.half = half
@@ -329,6 +346,7 @@ class LoadCamera:  # for inference
         self.fps = fps
         self.opencv_or_ffmpeg = opencv_or_ffmpeg
         self.trajectory = trajectory
+        self.trajectory_patching_machine = trajectory_patching_machine
         if self.opencv_or_ffmpeg == "opencv":
             self.cap = cv2.VideoCapture(self.source)  # video capture object
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)  # set buffer size
@@ -346,6 +364,8 @@ class LoadCamera:  # for inference
             img0 = np.frombuffer(in_bytes, np.uint8).reshape([self.height, self.width, 3])
         if self.trajectory:
             self.trajectory_init(img0)  # 落點
+        if self.trajectory_patchin_machine:
+            self.trajectory_patchin_machine_init(img0)
         self.model_choices = model_choices  # yolo or tracknet
         self.tracknet_image_list = None
 
@@ -457,7 +477,12 @@ class LoadCamera:  # for inference
             img = self.tracknet_image_list
             img = np.expand_dims(img, axis=0)
 
-        return img, img0, self.trajectory
+        if self.trajectory:
+            return img, img0, self.trajectory
+        elif self.trajectory_patching_machine:
+            return img, img0, self.trajectory_patching_machine
+        else:
+            return img, img0, False
 
     def __len__(self):
         return 0
