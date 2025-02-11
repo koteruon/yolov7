@@ -167,11 +167,11 @@ class BallTracker:
         self.balls_history = []  # 儲存歷史所有球的資訊
         self.ball_count = 0
         self.colormap = plt.get_cmap("Paired")  # 选择一个 colormap
-        self.score_threshold = 0.45  # 分數筏值 0.5
+        self.score_threshold = 0.5  # 分數筏值 0.5
         self.count_ball_threahold = 15  # 60fps = 15, 120fps = 40 # 有多少個歷史軌跡內才算發球
         self.count_ball_add_last_frame_number = 0  # 最後一個紀錄到發球軌跡的frame number
         self.count_balls = []  # 發球追蹤中
-        self.count_ball_reset_threahold = 75  # 幾個frame之後都沒有增加球就reset
+        self.count_ball_reset_threahold = 100  # 幾個frame之後都沒有增加球就reset
         self.count_ball_rounds = 1
         self.count_ball_score = {}  # key: round, value: (score)
         self.show_debug_output = show_debug_output
@@ -1254,7 +1254,7 @@ class Trajectory:
 
         # 影片跟目錄
         max_num = -1
-        max_folder = "C0099_1000_1660_step_2"  # realtime3
+        max_folder = "C0099_4000_4900_step_2"  # realtime3
         root_path = f"./runs/detect"
         pattern = re.compile(r"^realtime(\d+)$")
         if max_folder == "":
@@ -1281,7 +1281,7 @@ class Trajectory:
             root_path = os.path.join(root_path, sub_max_folder)
         print(f"root_path: {root_path}")
 
-        video_fullname = "C0099_1000_1660.mp4"
+        video_fullname = "C0099_4000_4900.mp4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
         self.input_path = os.path.join(root_path, video_fullname)

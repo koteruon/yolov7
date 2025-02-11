@@ -364,7 +364,7 @@ class LoadCamera:  # for inference
             img0 = np.frombuffer(in_bytes, np.uint8).reshape([self.height, self.width, 3])
         if self.trajectory:
             self.trajectory_init(img0)  # 落點
-        if self.trajectory_patchin_machine:
+        if self.trajectory_patching_machine:
             self.trajectory_patchin_machine_init(img0)
         self.model_choices = model_choices  # yolo or tracknet
         self.tracknet_image_list = None
