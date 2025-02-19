@@ -1254,7 +1254,7 @@ class Trajectory:
 
         # 影片跟目錄
         max_num = -1
-        max_folder = "C0099_4000_4900_step_2"  # realtime3
+        max_folder = "C0002_20250217_01"  # realtime3
         root_path = f"./runs/detect"
         pattern = re.compile(r"^realtime(\d+)$")
         if max_folder == "":
@@ -1281,7 +1281,7 @@ class Trajectory:
             root_path = os.path.join(root_path, sub_max_folder)
         print(f"root_path: {root_path}")
 
-        video_fullname = "C0099_4000_4900.mp4"
+        video_fullname = "C0002.MP4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
         self.input_path = os.path.join(root_path, video_fullname)

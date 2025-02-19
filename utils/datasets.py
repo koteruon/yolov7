@@ -349,7 +349,7 @@ class LoadCamera:  # for inference
         self.trajectory_patching_machine = trajectory_patching_machine
         if self.opencv_or_ffmpeg == "opencv":
             self.cap = cv2.VideoCapture(self.source)  # video capture object
-            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)  # set buffer size
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # set buffer size
             self.cap.set(cv2.CAP_PROP_FPS, fps)
             ret_val, img0 = self.cap.read()
         else:

@@ -2,18 +2,24 @@
 
 # create video0
 sudo modprobe v4l2loopback video_nr=0
+sudo modprobe v4l2loopback devices=1 video_nr=0 card_label="VirtualCam" max_buffers=300
+
+# 刪除 video0
+sudo modprobe -r v4l2loopback
 
 # 修改成照恩的目錄
 sudo chown chaoen:chaoen /dev/video0
 
 # 從擷取卡取得影像轉到 /dev/video0
 ffmpeg -y -f decklink -i 'DeckLink Quad HDMI Recorder (3)' -pix_fmt bgr24 -timestamps abs -f v4l2 /dev/video0
+ffmpeg -y -f decklink -i 'DeckLink Quad HDMI Recorder (3)' -fifo_size 32 -pix_fmt bgr24 -timestamps abs -f v4l2 -bufsize 2000M /dev/video0
 
 # 將檔案慢速成30FPS
 ffmpeg -i input.mp4 -vf setpts=4*PTS -r 30 output.mp4
 
 # 循環播放影片到 /dev/video0
-ffmpeg -re -stream_loop -1 -i /home/chaoen/yoloNhit_calvin/yolov7/inference/videos/C0086.MP4 -map 0:v -f v4l2 /dev/video0
+ffmpeg -re -stream_loop -1 -i /home/chaoen/yoloNhit_calvin/yolov7/inference/videos/C0002_60fps.MP4 -map 0:v -f v4l2 /dev/video0
+ffmpeg -re -stream_loop -1 -i /home/chaoen/yoloNhit_calvin/yolov7/inference/videos/C0002_60fps.MP4 -map 0:v -f v4l2 -bufsize 2000M /dev/video0
 
 mkfifo /home/chaoen/my_fifo
 ffmpeg -re -stream_loop -1 -i /home/chaoen/yoloNhit_calvin/yolov7/inference/videos/C0086.MP4 -map 0:v -f mpegts -c:v libx264 -fifo_size 10M /home/chaoen/my_fifo
