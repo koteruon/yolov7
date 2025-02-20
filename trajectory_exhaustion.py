@@ -8,6 +8,7 @@ import queue
 import re
 import sys
 import time
+from collections import defaultdict
 from pathlib import Path
 
 import cv2
@@ -178,20 +179,21 @@ class Trajectory:
         current_color_index = [0]  # 使用列表來保持可變性
 
         # 觀測區域
-        # self.PT_dict = {"img": image.copy(), "points": []}
-        # cv2.namedWindow("PIC2 (press Q to quit)", 0)
-        # cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
-        # cv2.setMouseCallback("PIC2 (press Q to quit)", self.draw_circle, (colors, current_color_index))
+        if self.mark:
+            self.PT_dict = {"img": image.copy(), "points": []}
+            cv2.namedWindow("PIC2 (press Q to quit)", 0)
+            cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
+            cv2.setMouseCallback("PIC2 (press Q to quit)", self.draw_circle, (colors, current_color_index))
 
-        # while True:
-        #     cv2.imshow("PIC2 (press Q to quit)", self.PT_dict["img"])
-        #     if cv2.waitKey(2) == ord("q"):
-        #         print(self.PT_dict)
-        #         cv2.destroyWindow("PIC2 (press Q to quit)")
-        #         break
-        # self.PT_dict = {"img": image.copy(), "points": [(505, 331), (506, 593), (1375, 568), (1361, 327)]}  # C0008
-        self.PT_dict = {"img": image.copy(), "points": [(625, 320), (629, 587), (1361, 555), (1341, 317)]}  # C0009
-        # self.PT_dict = {"img": image.copy(), "points": [(691, 221), (681, 600), (1396, 591), (1366, 213)]}  # C0012
+            while True:
+                cv2.imshow("PIC2 (press Q to quit)", self.PT_dict["img"])
+                if cv2.waitKey(2) == ord("q"):
+                    print(self.PT_dict)
+                    cv2.destroyWindow("PIC2 (press Q to quit)")
+                    break
+            self.Write_focus_bbox(self.PT_dict["points"])
+        else:
+            self.PT_dict = {"img": image.copy(), "points": self.Read_focus_bbox()}
 
         grouped_points = [
             self.PT_dict["points"][i : i + 4]
@@ -296,28 +298,42 @@ class Trajectory:
                 x_tmp = q_array[:, 0]
                 y_tmp = q_array[:, 1]
 
-            if self.x_c_pred >= self.x_pre_c_pred:
-                ball_point = (self.x_c_pred, self.y_c_pred)
-                if self.swtich_polygon_paths:
-                    if any(polygon.contains_point(ball_point) for polygon in self.swtich_polygon_paths):
-                        if self.pixel_area_switch:
-                            if self.pixel_area_current == None:
-                                self.pixel_area_current = 0
-                            elif self.pixel_area_current == 0:
-                                self.pixel_area_current = 1
-                            else:
-                                self.pixel_area_current = 0
-                        self.pixel_area_switch = False
-                    else:
-                        self.pixel_area_switch = True
+            if self.calculate_speed_direction != "right" and self.calculate_speed_direction != "left":
+                raise Exception("error direction")
 
-                deistance_pixel = self.Euclidean_Distance(
-                    self.x_pre_c_pred, self.y_pre_c_pred, self.x_c_pred, self.y_c_pred
-                )
+            if self.calculate_speed_direction == "right":
+                if self.x_c_pred < self.x_pre_c_pred:
+                    self.speed[self.count] = 0.0
+                    return
 
-                self.speed[self.count] = self.calculate_ball_speed(deistance_pixel)
-            else:
-                self.speed[self.count] = 0.0
+            if self.calculate_speed_direction == "left":
+                if self.x_c_pred > self.x_pre_c_pred:
+                    self.speed[self.count] = 0.0
+                    return
+
+            ball_point = (self.x_c_pred, self.y_c_pred)
+            if self.swtich_polygon_paths:
+                if any(polygon.contains_point(ball_point) for polygon in self.swtich_polygon_paths):
+                    if self.pixel_area_switch:
+                        if self.pixel_area_current == None:
+                            self.pixel_area_current = 0
+                        elif self.pixel_area_current == 0:
+                            self.pixel_area_current = 1
+                        else:
+                            self.pixel_area_current = 0
+                    self.pixel_area_switch = False
+                else:
+                    self.pixel_area_switch = True
+
+            if self.area_timestamp_ranges:
+                self.Check_Pixel_Area_Timestamp()
+
+            deistance_pixel = self.Euclidean_Distance(
+                self.x_pre_c_pred, self.y_pre_c_pred, self.x_c_pred, self.y_c_pred
+            )
+
+            self.speed[self.count] = self.calculate_ball_speed(deistance_pixel)
+
         else:
             self.speed[self.count] = 0.0
 
@@ -362,7 +378,7 @@ class Trajectory:
 
         return image_CV
 
-    def __init__(self, real_time=False):
+    def __init__(self, root_path, video_fullname, timestamp_path, id, mark=False):
         # temp#
         self.only_speed = False
 
@@ -370,8 +386,6 @@ class Trajectory:
         self.WIDTH = 512
 
         # 影片跟目錄
-        root_path = f"./runs/detect/exhaustion_C0009_02"
-        video_fullname = "C0009.MP4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
         self.input_path = os.path.join(root_path, video_fullname)
@@ -398,18 +412,86 @@ class Trajectory:
         self.x_c_pred, self.y_c_pred = np.inf, np.inf  # 球體中心位置
         self.x_pre_c_pred, self.y_pre_c_pred = np.inf, np.inf  # 球體中心位置
 
+        self.mark = mark
+
+        # 球速參數
         self.speed = {}
         self.no_ball = 0
         self.real_ball_size = 0.0395  # 單位是m
-        self.frame_ball_pixel = [19]  # 單位是pixel C0008 33 C0009 19 C0012 25,19
+
+        self.Read_ball_pixel()
         self.meters_per_pixel = [
             self.real_ball_size / pixel for pixel in self.frame_ball_pixel
         ]  # 依據每個 pixel 值計算 meters_per_pixel
         self.pixel_area_switch = True
-        self.pixel_area_current = 0  # C0008 C0009 0 C0012 None
+        self.pixel_area_current = 0
+        self.area_timestamp_ranges = None
+
+        if id == "id13":
+            self.Read_Timestamp(timestamp_path)
+        self.Read_Direction()
 
         self.polygon_paths = None
         self.swtich_polygon_paths = None
+
+    def Read_ball_pixel(self, filename="exhaustion/ball_size.csv"):
+        df = pd.read_csv(filename)
+        frame_ball_pixel = {}
+        for _, row in df.iterrows():
+            pixels = [row[col] for col in df.columns if col.startswith("pixel") and not pd.isna(row[col])]
+            frame_ball_pixel[row["video_id"]] = pixels
+        self.frame_ball_pixel = frame_ball_pixel.get(self.video_name)
+
+    def Read_focus_bbox(self, filename="exhaustion/focus_bbox.csv"):
+        df = pd.read_csv(filename)
+        # 只取當前影片的資料
+        row = df[df["video_id"] == self.video_name]
+        if row.empty:
+            raise Exception("No Focus BBox")
+        # 解析點座標
+        points = []
+        for i in range(1, (len(row.columns) - 1) // 2 + 1):  # 從 point_x1, point_y1 開始
+            x, y = row[f"point_x{i}"].values[0], row[f"point_y{i}"].values[0]
+            if pd.notna(x) and pd.notna(y):  # 避免 NaN 值
+                points.append((x, y))
+        return points
+
+    def Write_focus_bbox(self, points_list, filename="exhaustion/focus_bbox.csv"):
+        try:
+            df = pd.read_csv(filename)
+        except FileNotFoundError:
+            df = pd.DataFrame(columns=["video_id"])  # 先初始化一個空的 DataFrame
+        # 移除舊的該影片資料
+        df = df[df["video_id"] != self.video_name]
+        # 構建新的一行資料
+        new_row = {"video_id": self.video_name}
+        for i, (x, y) in enumerate(points_list, start=1):
+            new_row[f"point_x{i}"] = x
+            new_row[f"point_y{i}"] = y
+        # 將新資料轉為 DataFrame 並合併
+        new_data = pd.DataFrame([new_row])
+        df = pd.concat([df, new_data], ignore_index=True)
+        # 儲存回 CSV
+        df.to_csv(filename, index=False)
+
+    def Read_Timestamp(self, filename):
+        df = pd.read_csv(filename)
+        self.area_timestamp_ranges = list(df.itertuples(index=True, name=None))
+
+    def Check_Pixel_Area_Timestamp(self):
+        self.pixel_area_current = 0
+        for index, start, end in self.area_timestamp_ranges:
+            if start <= self.count <= end:
+                self.pixel_area_current = 1 if index % 2 == 1 else 0
+                break
+
+    def Read_Direction(self, filename="exhaustion/direction.csv"):
+        df = pd.read_csv(filename)
+        # 只取當前影片的資料
+        row = df[df["video_id"] == self.video_name]
+        if row.empty:
+            raise Exception("No Direction")
+        self.calculate_speed_direction = row["direction"].iloc[0]
 
     def Set_Frame_Info(self, frame_height, frame_width, framerate):
         self.frame_height = frame_height
@@ -500,5 +582,17 @@ class Trajectory:
 
 
 if __name__ == "__main__":
-    trajectory = Trajectory()
-    trajectory.main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mark", action="store_true")
+    opt = parser.parse_args()
+
+    videos = ["301", "302", "303", "304", "305", "307", "308", "309"]
+    ids = ["id11", "id12", "id13"]
+
+    for video in videos:
+        for id in ids:
+            root_path = f"./runs/detect/exhaustion_{video}_{id}"
+            video_fullname = f"{video}_{id}.mp4"
+            timestamp_path = f"./exhaustion/{video}_{id}_timestamp.csv"
+            trajectory = Trajectory(root_path, video_fullname, timestamp_path, id, mark=opt.mark)
+            trajectory.main()
