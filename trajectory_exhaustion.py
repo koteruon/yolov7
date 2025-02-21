@@ -139,7 +139,7 @@ class Trajectory:
         if not success:
             raise Exception("Could not read")
 
-        framerate = int(cap.get(cv2.CAP_PROP_FPS))
+        framerate = int(round(cap.get(cv2.CAP_PROP_FPS)))
         frame_height, frame_width = int(cap.get(4)), int(cap.get(3))
         total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
 
@@ -304,12 +304,12 @@ class Trajectory:
             if self.calculate_speed_direction == "right":
                 if self.x_c_pred < self.x_pre_c_pred:
                     self.speed[self.count] = 0.0
-                    return
+                    return image_CV
 
             if self.calculate_speed_direction == "left":
                 if self.x_c_pred > self.x_pre_c_pred:
                     self.speed[self.count] = 0.0
-                    return
+                    return image_CV
 
             ball_point = (self.x_c_pred, self.y_c_pred)
             if self.swtich_polygon_paths:
@@ -556,12 +556,13 @@ class Trajectory:
                 if not self.ball_update:
                     self.x_c_pred, self.y_c_pred = np.inf, np.inf  # 球體中心位置
                     self.x_pre_c_pred, self.y_pre_c_pred = np.inf, np.inf  # 球體中心位置
+
                 image_CV = self.Calculate_Speed(image)
                 image_CV = self.Draw_On_Image(image_CV)
 
-                self.Next_Count()
                 output.write(image_CV)
                 pbar.update(1)
+                self.Next_Count()
 
                 success, image = cap.read()
 
