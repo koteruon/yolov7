@@ -208,12 +208,14 @@ class YoloV7:
                             sub_save_path = Path(increment_path(save_path, exist_ok=opt.exist_ok))
                             sub_save_path.mkdir(parents=True, exist_ok=True)
                             video_path = str(sub_save_path / p.name) + ".mp4"
+                            # video_path = str(sub_save_path / p.name) + ".avi"
                             text_dir = Path(sub_save_path / "labels")
                             text_dir.mkdir(parents=True, exist_ok=True)
                             is_recording = True
                             record_frame = 1
                             fps, w, h = 60, im0.shape[1], im0.shape[0]
                             vid_writer = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+                            # vid_writer = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*"FFV1"), fps, (w, h))
                             if trajectory:
                                 output_video_path = str(sub_save_path / p.name) + "_predict_12.mp4"
                                 trajectory.Write_Video(output_video_path, (1080, 1920))

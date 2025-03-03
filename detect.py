@@ -308,7 +308,12 @@ class YoloV7:
 
                                 if save_img or view_img:  # Add bbox to image
                                     if not opt.only_one_ball or int(cls) != 0:
-                                        label = f"{names[int(cls)]} {conf:.2f}"
+                                        if opt.no_show_conf and opt.no_show_label:
+                                            label = None
+                                        elif opt.no_show_conf:
+                                            label = f"{names[int(cls)]}"
+                                        else:
+                                            label = f"{names[int(cls)]} {conf:.2f}"
                                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
 
                             # 紀錄出信心最高的那一顆球
@@ -333,7 +338,12 @@ class YoloV7:
                             if (
                                 opt.only_one_ball and most_confidence != -1 and most_confidence_ball_xyxy != None
                             ):  # Add bbox to image
-                                label = f"{names[int(0)]} {most_confidence:.2f}"
+                                if opt.no_show_conf and opt.no_show_label:
+                                    label = None
+                                elif opt.no_show_conf:
+                                    label = f"{names[int(0)]}"
+                                else:
+                                    label = f"{names[int(0)]} {most_confidence:.2f}"
                                 plot_one_box(
                                     most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=1
                                 )
@@ -416,6 +426,8 @@ if __name__ == "__main__":
     parser.add_argument("--only-one-ball", action="store_true", help="predict ball only the hightest prediction")
     parser.add_argument("--draw-ball-path", default="", help="draw ball label path")
     parser.add_argument("--step", type=int, default=1, help="step number")
+    parser.add_argument("--no-show-conf", action="store_true", help="no show conf")
+    parser.add_argument("--no-show-label", action="store_true", help="no show conf")
     opt = parser.parse_args()
     print(opt)
     # check_requirements(exclude=('pycocotools', 'thop'))

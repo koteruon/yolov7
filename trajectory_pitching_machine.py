@@ -421,42 +421,6 @@ class BallTracker:
 
 
 class Trajectory:
-    def PJcurvature(self, x, y):
-        # 計算離散取率
-        """
-        input  : the coordinate of the three point
-        output : the curvature and norm direction
-        """
-        t_a = LA.norm([x[1] - x[0], y[1] - y[0]])
-        t_b = LA.norm([x[2] - x[1], y[2] - y[1]])
-
-        M = np.array([[1, -t_a, t_a**2], [1, 0, 0], [1, t_b, t_b**2]])
-
-        try:
-            inv = LA.inv(M)
-        except:
-            inv = LA.pinv(M)
-
-        a = np.matmul(inv, x)
-        b = np.matmul(inv, y)
-
-        if (a[1] ** 2 + b[1] ** 2) ** (1.5) == 0:
-            kappa = 0
-        else:
-            kappa = 2 * (a[2] * b[1] - b[2] * a[1]) / (a[1] ** 2 + b[1] ** 2) ** (1.5)
-
-        return kappa, 0
-
-    def Custom_Time(self, time):
-        # time: in milliseconds
-        seconds, milliseconds = divmod(milliseconds, 1000)
-        minutes, seconds = divmod(seconds, 60)
-        hours, minutes = divmod(minutes, 60)
-
-        # 格式化時間
-        cts = "{:02d}:{:02d}:{:02d}.{:03d}".format(hours, minutes, seconds, milliseconds)
-        return cts
-
     def Monotonic(self, L, strictly=False, half=False):
         # 檢查單調函數(嚴格遞增或遞減)
         if half:
@@ -537,11 +501,6 @@ class Trajectory:
                 else:
                     return "unknown"
 
-    def Euclidean_Distance(self, x, y, x1, y1):
-        # 計算歐式距離
-        ed = math.sqrt(pow(x - x1, 2) + pow(y - y1, 2))
-        return ed
-
     def Parabola_Function(self, params, x):
         # 拋物線函數 Parabola Function
         a, b, c = params
@@ -567,138 +526,6 @@ class Trajectory:
         )
         PT = (int(x), int(y))
         return PT
-
-    def Generate_HeatMap(self, w, h, x_c, y_c, r, mag):
-        # 生成熱力圖(觀察球的mask)
-        if x_c < 0 or y_c < 0:
-            return np.zeros((h, w))
-        x, y = np.meshgrid(np.linspace(1, w, w), np.linspace(1, h, h))
-        heatmap = ((y - (y_c + 1)) ** 2) + ((x - (x_c + 1)) ** 2)
-        heatmap[heatmap <= r**2] = 1
-        heatmap[heatmap > r**2] = 0
-        return heatmap * mag
-
-    def Count_BounceLocation(self, frame):
-        # 落點分析 bounce analyize function
-        row = int(frame[0] / int(self.miniboard_width / 4))
-        column = int(frame[1] / int(self.miniboard_height / 3))
-        if 0 <= row < 4 and 0 <= column < 3:
-            self.bounce_location_list[row][column] += 1
-
-    def Detect_Color_Level(self, score, side, side_min, side_max):
-        # 判斷落點方
-        # gray_level_min  = 0
-        gray_level_max = 255
-        color = []
-        if side_max == 0:
-            normalize_score = 0
-        else:
-            # score / side_min+(side_max- side_min)
-            normalize_score = int(np.round((score) * (255 / (side_max)), 0))
-        if side == "left":
-            color = (
-                gray_level_max - normalize_score,
-                gray_level_max - normalize_score,
-                255,
-            )  # (0,0,255)
-            return color
-        elif side == "right":
-            color = (
-                gray_level_max - normalize_score,
-                255,
-                gray_level_max - normalize_score,
-            )
-            return color
-
-    def Draw_Bounce_Analysis(self):
-        # 落點分析圖
-        self.bounce_analyze_img = self.Draw_MiniBoard("bounce")
-        score_table = np.zeros((4, 3), dtype=int)
-
-        # calculate side sum
-        left_bounce_sum = np.sum(self.bounce_location_list[:2])
-        right_bounce_sum = np.sum(self.bounce_location_list[2:])
-
-        # calculate side score
-        ### Calculate score for left side
-        if left_bounce_sum != 0:
-            left_scores = np.round((self.bounce_location_list[:2] / left_bounce_sum) * 100).astype(int)
-        else:
-            left_scores = np.zeros((2, 3), dtype=int)
-        ### Calculate score for right side
-        if right_bounce_sum != 0:
-            right_scores = np.round((self.bounce_location_list[2:] / right_bounce_sum) * 100).astype(int)
-        else:
-            right_scores = np.zeros((2, 3), dtype=int)
-        ### Assign scores to score_table
-        score_table[:2] = left_scores
-        score_table[2:] = right_scores
-
-        # find max and min
-        ### Find min and max for left side
-        left_score_min = np.min(score_table[:2])
-        left_score_max = np.max(score_table[:2])
-
-        ### Find min and max for right side
-        right_score_min = np.min(score_table[2:])
-        right_score_max = np.max(score_table[2:])
-
-        for i in range(4):
-            for j in range(3):
-                if i < 2:
-                    # left
-                    color_detect = self.Detect_Color_Level(score_table[i][j], "left", left_score_min, left_score_max)
-                else:
-                    # right
-                    color_detect = self.Detect_Color_Level(score_table[i][j], "right", right_score_min, right_score_max)
-                text = str(score_table[i][j]) + "%"
-                cv2.rectangle(
-                    self.bounce_analyze_img,
-                    (
-                        self.miniboard_edge + (i * int(self.miniboard_width / 4)) + 10,
-                        self.miniboard_edge + (j * int(self.miniboard_height / 3)) + 10,
-                    ),
-                    (
-                        ((i + 1) * int(self.miniboard_width / 4)) + self.miniboard_edge - 10,
-                        ((j + 1) * int(self.miniboard_height / 3)) + self.miniboard_edge - 10,
-                    ),
-                    color=color_detect,
-                    thickness=-1,
-                )
-                cv2.putText(
-                    self.bounce_analyze_img,
-                    text,
-                    (
-                        self.miniboard_edge + (i * int(self.miniboard_width / 4)) + self.miniboard_edge * 2,
-                        self.miniboard_edge + (j * int(self.miniboard_height / 3)) + self.miniboard_text_bias,
-                    ),
-                    cv2.FONT_HERSHEY_COMPLEX_SMALL,
-                    1,
-                    (1, 1, 1),
-                    1,
-                    cv2.LINE_AA,
-                )
-
-    def Show_Bounce(self):
-        cv2.imshow(self.bounce_title, self.img_opt)
-
-    def Show_Bounce_Analysis(self):
-        cv2.imshow(self.bounce_analysis_title, self.bounce_analyze_img)
-
-    def Save_Bounce_Analysis(self):
-        cv2.imwrite(
-            f"{self.analysis_img_path}/{self.video_name}_analysis.jpg",
-            self.bounce_analyze_img,
-        )
-
-    def Show_Bounce_Location(self):
-        cv2.imshow(self.bounce_location_title, self.img_opt_bounce_location)
-
-    def Save_Bounce_Location(self):
-        cv2.imwrite(
-            f"{self.bounce_img_path}/{self.video_name}_bounce.jpg",
-            self.img_opt_bounce_location,
-        )
 
     def Draw_MiniBoard(self, option=None):
         img_opt = np.zeros(
@@ -786,15 +613,8 @@ class Trajectory:
             color,
             4,
         )
-        # analyze location
-        self.Count_BounceLocation(self.PT_dict[self.count])
-        if self.is_show_bounce_analysis:
-            self.Draw_Bounce_Analysis()
-            self.Show_Bounce_Analysis()
-        if self.is_show_bounce_location:
-            self.Show_Bounce_Location()
 
-    def Create_Output_Dir(self, output_path, video_name):
+    def Create_Output_Dir(self, output_path):
         # 建立輸出檔案夾
         output_path = Path(output_path)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -802,53 +622,8 @@ class Trajectory:
         video_path = Path(output_path.joinpath("video"))
         video_path.mkdir(parents=True, exist_ok=True)
         video_path = video_path.as_posix()
-        # 建立球點預測表格資料夾
-        record_ball_path = Path(output_path.joinpath("record_balls"))
-        record_ball_path.mkdir(parents=True, exist_ok=True)
-        record_ball_path = record_ball_path.as_posix()
-        # 建立球點預測表格資料夾
-        record_pose_path = Path(output_path.joinpath("record_keypoints"))
-        record_pose_path.mkdir(parents=True, exist_ok=True)
-        record_pose_path = record_pose_path.as_posix()
-        # 建立落點分析圖資料夾
-        analysis_img_path = Path(output_path.joinpath("analysis"))
-        analysis_img_path.mkdir(parents=True, exist_ok=True)
-        analysis_img_path = analysis_img_path.as_posix()
-        # 建立落點統計圖資料夾
-        bounce_loc_path = Path(output_path.joinpath("bounce_location"))
-        bounce_loc_path.mkdir(parents=True, exist_ok=True)
-        bounce_loc_path = bounce_loc_path.as_posix()
-        # 建立落點表格資料夾
-        bounce_img_path = Path(output_path.joinpath("bounce"))
-        bounce_img_path.mkdir(parents=True, exist_ok=True)
-        bounce_img_path = bounce_img_path.as_posix()
-        # 建立Keypoints資料夾
-        keypoints_path = Path(output_path.joinpath("keypoints").joinpath(video_name))
-        keypoints_path.mkdir(parents=True, exist_ok=True)
-        keypoints_path = Path(output_path.joinpath("keypoints"))
-        keypoints_path = keypoints_path.as_posix()
-        # 建立球速直方圖
-        speedhis_path = Path(output_path.joinpath("speedhis"))
-        speedhis_path.mkdir(parents=True, exist_ok=True)
-        speedhis_path = Path(output_path.joinpath("speedhis"))
-        speedhis_path = speedhis_path.as_posix()
-        # 建立球速直方圖
-        speed_distribution_path = Path(output_path.joinpath("speed_distribution"))
-        speed_distribution_path.mkdir(parents=True, exist_ok=True)
-        speed_distribution_path = Path(output_path.joinpath("speed_distribution"))
-        speed_distribution_path = speed_distribution_path.as_posix()
 
-        return (
-            video_path,
-            record_ball_path,
-            record_pose_path,
-            analysis_img_path,
-            bounce_loc_path,
-            bounce_img_path,
-            keypoints_path,
-            speedhis_path,
-            speed_distribution_path,
-        )
+        return video_path
 
     def Read_Video(self, input_path):
         # 讀取影片
@@ -863,19 +638,13 @@ class Trajectory:
 
         # 讀取影片
         cap = cv2.VideoCapture(input_path)
-        n = 0
-        while True:
-            n += 1
-            cap.grab()
-            if n == self.step:
-                success, image = cap.retrieve()
-                break
+        success, image = cap.read()
         if not success:
             raise Exception("Could not read")
 
-        framerate = round(int(cap.get(cv2.CAP_PROP_FPS)) / self.step)
+        framerate = int(round(cap.get(cv2.CAP_PROP_FPS)))
         frame_height, frame_width = int(cap.get(4)), int(cap.get(3))
-        total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT) // self.step
+        total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
 
         return success, image, cap, framerate, frame_height, frame_width, total_frames
 
@@ -903,24 +672,52 @@ class Trajectory:
     def Release_Video(self):
         self.output.release()
 
+    def Load_Mark_Point(self, csv_path, PT_data):
+        df = pd.read_csv(csv_path)
+        df = df[df["video_id"] == self.video_name]
+        if not df.empty:
+            row = df.iloc[0]  # 取第一行數據
+            PT_data["point_x"] = [row[f"point_x{i}"] for i in range(1, 5)]
+            PT_data["point_y"] = [row[f"point_y{i}"] for i in range(1, 5)]
+            return True
+        else:
+            return False
+
+    def Save_Mark_Point(self, csv_path, PT_data):
+        df = pd.read_csv(csv_path)
+        new_row = {
+            "video_id": self.video_name,
+            "point_x1": PT_data["point_x"][0],
+            "point_x2": PT_data["point_x"][1],
+            "point_x3": PT_data["point_x"][2],
+            "point_x4": PT_data["point_x"][3],
+            "point_y1": PT_data["point_y"][0],
+            "point_y2": PT_data["point_y"][1],
+            "point_y3": PT_data["point_y"][2],
+            "point_y4": PT_data["point_y"][3],
+        }
+        if self.video_name in df["video_id"].values:
+            df.loc[df["video_id"] == self.video_name, new_row.keys()] = new_row.values()
+        else:
+            new_data = pd.DataFrame([new_row])
+            df = pd.concat([df, new_data], ignore_index=True)
+        df.to_csv(csv_path, index=False)
+
     def Mark_Perspective_Distortion_Point(self, image, frame_width, frame_height):
         # 點選透視變形位置, 順序為:左上,左下,右下,右上
         PT_data = {"img": image.copy(), "point_x": [], "point_y": [], "color": (0, 255, 255)}
-        # TODO: 測試用
-        PT_data["point_x"] = [523, 205, 1917, 1581]
-        PT_data["point_y"] = [662, 806, 814, 668]
-        # PT_data["point_x"] = [543, 205, 1917, 1555]  # C0099_2500_3200
-        # PT_data["point_y"] = [645, 806, 811, 650]  # C0099_2500_3200
-        # TODO 測試用
-        # cv2.namedWindow("PIC2 (press Q to quit)", 0)
-        # cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
-        # cv2.setMouseCallback("PIC2 (press Q to quit)", self.Draw_Circle, PT_data)
-        # while True:
-        #     cv2.imshow("PIC2 (press Q to quit)", PT_data["img"])
-        #     if cv2.waitKey(2) == ord("q"):
-        #         print(PT_data)
-        #         cv2.destroyWindow("PIC2 (press Q to quit)")
-        #         break
+        table_csv_path = r"pitching_machine/table.csv"
+        if not self.Load_Mark_Point(table_csv_path, PT_data):
+            cv2.namedWindow("PIC2 (press Q to quit)", 0)
+            cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
+            cv2.setMouseCallback("PIC2 (press Q to quit)", self.Draw_Circle, PT_data)
+            while True:
+                cv2.imshow("PIC2 (press Q to quit)", PT_data["img"])
+                if cv2.waitKey(2) == ord("q"):
+                    print(PT_data)
+                    cv2.destroyWindow("PIC2 (press Q to quit)")
+                    break
+            self.Save_Mark_Point(table_csv_path, PT_data)
 
         # PerspectiveTransform
         upper_left = [PT_data["point_x"][0], PT_data["point_y"][0]]
@@ -942,30 +739,21 @@ class Trajectory:
         # 繪製迷你落點板
         self.img_opt = self.Draw_MiniBoard()
         self.img_opt_bounce_location = self.Draw_MiniBoard("bounce")
-        self.bounce_analyze_img = self.Draw_MiniBoard("bounce")
-
-        # 顯示
-        if self.is_show_bounce_analysis:
-            self.Draw_Bounce_Analysis()
-            self.Show_Bounce_Analysis()
-        if self.is_show_bounce_location:
-            self.Show_Bounce_Location()
 
         # 框選發球機可增加球的位置，順序為:左上,左下,右下,右上
         PT_data = {"img": image.copy(), "point_x": [], "point_y": [], "color": (0, 255, 128)}
-        # TODO: 測試用
-        PT_data["point_x"] = [1633, 1629, 1786, 1784]
-        PT_data["point_y"] = [525, 725, 737, 526]
-        # TODO 測試用
-        # cv2.namedWindow("pitching maching (press Q to quit)", 0)
-        # cv2.resizeWindow("pitching maching (press Q to quit)", frame_width, frame_height)
-        # cv2.setMouseCallback("pitching maching (press Q to quit)", self.Draw_Circle, PT_data)
-        # while True:
-        #     cv2.imshow("pitching maching (press Q to quit)", PT_data["img"])
-        #     if cv2.waitKey(2) == ord("q"):
-        #         print(PT_data)
-        #         cv2.destroyWindow("pitching maching (press Q to quit)")
-        #         break
+        pitching_csv_path = r"pitching_machine/pitching.csv"
+        if not self.Load_Mark_Point(pitching_csv_path, PT_data):
+            cv2.namedWindow("pitching maching (press Q to quit)", 0)
+            cv2.resizeWindow("pitching maching (press Q to quit)", frame_width, frame_height)
+            cv2.setMouseCallback("pitching maching (press Q to quit)", self.Draw_Circle, PT_data)
+            while True:
+                cv2.imshow("pitching maching (press Q to quit)", PT_data["img"])
+                if cv2.waitKey(2) == ord("q"):
+                    print(PT_data)
+                    cv2.destroyWindow("pitching maching (press Q to quit)")
+                    break
+            self.Save_Mark_Point(pitching_csv_path, PT_data)
 
         upper_left = [PT_data["point_x"][0], PT_data["point_y"][0]]
         lower_left = [PT_data["point_x"][1], PT_data["point_y"][1]]
@@ -976,19 +764,18 @@ class Trajectory:
 
         # 框選發球機計算球的位置，順序為:左上,左下,右下,右上
         PT_data = {"img": image.copy(), "point_x": [], "point_y": [], "color": (255, 0, 0)}
-        # TODO: 測試用
-        PT_data["point_x"] = [1185, 1175, 1330, 1341]
-        PT_data["point_y"] = [334, 803, 805, 330]
-        # TODO 測試用
-        # cv2.namedWindow("count ball (press Q to quit)", 0)
-        # cv2.resizeWindow("count ball (press Q to quit)", frame_width, frame_height)
-        # cv2.setMouseCallback("count ball (press Q to quit)", self.Draw_Circle, PT_data)
-        # while True:
-        #     cv2.imshow("count ball (press Q to quit)", PT_data["img"])
-        #     if cv2.waitKey(2) == ord("q"):
-        #         print(PT_data)
-        #         cv2.destroyWindow("count ball (press Q to quit)")
-        #         break
+        checkpoint_csv_path = r"pitching_machine/checkpoint.csv"
+        if not self.Load_Mark_Point(checkpoint_csv_path, PT_data):
+            cv2.namedWindow("count ball (press Q to quit)", 0)
+            cv2.resizeWindow("count ball (press Q to quit)", frame_width, frame_height)
+            cv2.setMouseCallback("count ball (press Q to quit)", self.Draw_Circle, PT_data)
+            while True:
+                cv2.imshow("count ball (press Q to quit)", PT_data["img"])
+                if cv2.waitKey(2) == ord("q"):
+                    print(PT_data)
+                    cv2.destroyWindow("count ball (press Q to quit)")
+                    break
+            self.Save_Mark_Point(checkpoint_csv_path, PT_data)
 
         upper_left = [PT_data["point_x"][0], PT_data["point_y"][0]]
         lower_left = [PT_data["point_x"][1], PT_data["point_y"][1]]
@@ -1039,8 +826,6 @@ class Trajectory:
             else:
                 x_tmp = q_array[:, 0]
                 y_tmp = q_array[:, 1]
-            # x_tmp = [self.q[j][0] for j in range(balls) if self.q[j] is not None]
-            # y_tmp = [self.q[j][1] for j in range(balls) if self.q[j] is not None]
             ## 落點預測 ######################################################################################################
             if len(x_tmp) >= 3:
                 # 檢查是否嚴格遞增或嚴格遞減,(軌跡方向是否相同)
@@ -1113,13 +898,10 @@ class Trajectory:
 
         # Place miniboard on upper right corner
         if self.is_show_bounce:
-            if self.is_show_bounce_window:
-                self.Show_Bounce()
-            else:
-                image_CV[
-                    : self.miniboard_height + self.miniboard_edge * 2,
-                    self.frame_width - (self.miniboard_width + self.miniboard_edge * 2) :,
-                ] = self.img_opt
+            image_CV[
+                : self.miniboard_height + self.miniboard_edge * 2,
+                self.frame_width - (self.miniboard_width + self.miniboard_edge * 2) :,
+            ] = self.img_opt
 
         if self.show_debug_output:
             for idx, ball in enumerate(self.ball_tracker.balls, 1):
@@ -1213,10 +995,6 @@ class Trajectory:
 
         return image_CV
 
-    def Write_Bounce_Location(self):
-        bounce_loc_pd = pd.DataFrame(self.bounce_location_list)
-        bounce_loc_pd.to_csv(f"{self.bounce_loc_path}/{self.video_name}_bounce_list.csv", index=False)
-
     def Draw_Speed_Under_Ball(self, image):
         if self.count in self.record_ball:
             # word position
@@ -1244,17 +1022,12 @@ class Trajectory:
             print(self.count)
         return image
 
-    def __init__(self, real_time=False, step=1):
-
-        # temp#
-        self.only_speed = False
-
-        self.HEIGHT = 288  # model input size
-        self.WIDTH = 512
-
-        # 影片跟目錄
+    def Create_Video_Output_Path(self, realtime=False):
+        # 影片跟目錄3
+        max_folder = ""
+        if not realtime:
+            max_folder = "C0002_20250303_01"  # realtime3
         max_num = -1
-        max_folder = "C0002_20250217_01"  # realtime3
         root_path = f"./runs/detect"
         pattern = re.compile(r"^realtime(\d+)$")
         if max_folder == "":
@@ -1267,7 +1040,9 @@ class Trajectory:
                         max_folder = folder_name
         root_path = os.path.join(root_path, max_folder)
         sub_max_num = -1
-        sub_max_folder = None  # "" = Realtime
+        sub_max_folder = ""
+        if not realtime:
+            sub_max_folder = None
         sub_pattern = re.compile(r"^Realtime(\d+)$")
         if sub_max_folder != None and sub_max_folder == "":
             for folder_name in os.listdir(root_path):
@@ -1281,24 +1056,14 @@ class Trajectory:
             root_path = os.path.join(root_path, sub_max_folder)
         print(f"root_path: {root_path}")
 
-        video_fullname = "C0002.MP4"
+        if not realtime:
+            video_fullname = "C0002.MP4"
+        else:
+            video_fullname = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
         self.input_path = os.path.join(root_path, video_fullname)
-
-        # 建立目錄
-        output_path = f"./inference/output"
-        (
-            self.video_path,
-            record_ball_path,
-            record_pose_path,
-            self.analysis_img_path,
-            self.bounce_loc_path,
-            self.bounce_img_path,
-            keypoints_path,
-            self.speedhis_path,
-            self.speed_distribution_path,
-        ) = self.Create_Output_Dir(output_path, self.video_name)
 
         if sub_max_folder != None:
             self.video_path = os.path.join(self.video_path, max_folder, sub_max_folder)
@@ -1306,6 +1071,17 @@ class Trajectory:
 
         # yolo labels path
         self.label_path = os.path.join(root_path, "labels")
+
+    def __init__(self):
+        # temp
+        self.HEIGHT = 288  # model input size
+        self.WIDTH = 512
+
+        # 建立目錄
+        output_path = f"./inference/output"
+        self.video_path = self.Create_Output_Dir(output_path)
+
+        self.Create_Video_Output_Path()
 
         # miniboard 的大小
         self.miniboard_width = 544  # 原先為548
@@ -1324,43 +1100,19 @@ class Trajectory:
         self.PT_dict = {}
 
         # 參數
-        self.bounce_location_list = np.zeros((4, 3), dtype=int)
         self.bouncing_offset_x, self.bouncing_offset_y = 10, 15  # bouncing location offset
         self.count = 1  # 記錄處理幾個 Frame (從step開始)
 
         # 顯示參數
         self.is_show_bounce = True
-        self.is_show_bounce_window = False
-        self.is_show_bounce_analysis = False
-        self.is_show_bounce_location = False
-        self.is_show_speed_analysis = False
-        if real_time:
-            self.is_show_bounce_window = True
-            self.bounce_title = "Bounce"
-            cv2.namedWindow(self.bounce_title, cv2.WINDOW_NORMAL)
-            self.is_show_bounce_analysis = True
-            self.bounce_analysis_title = "Bounce Analysis"
-            cv2.namedWindow(self.bounce_analysis_title, cv2.WINDOW_NORMAL)
-            self.is_show_bounce_location = True
-            self.bounce_location_title = "Bounce Location"
-            cv2.namedWindow(self.bounce_location_title, cv2.WINDOW_NORMAL)
-            self.is_show_speed_analysis = True
-            self.speedhis_title = "Speed Histogram"
-            cv2.namedWindow(self.speedhis_title, cv2.WINDOW_NORMAL)
-            self.speed_distribution_title = "Speed Distribution"
-            cv2.namedWindow(self.speed_distribution_title, cv2.WINDOW_NORMAL)
-            self.Draw_SpeedHist(save=False, show=True)
-            self.video_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
         self.analysis_output = True
         self.show_debug_output = False
-        self.use_parabola = False
+        self.use_parabola = True
         self.freetype = cv2.freetype.createFreeType2()
         self.freetype.loadFontData(fontFileName="ttf/MSJH.TTC", id=0)
 
         self.ball_tracker = BallTracker(self.show_debug_output)
-
-        self.step = step
 
     def Set_Frame_Info(self, frame_height, frame_width, framerate):
         self.frame_height = frame_height
@@ -1384,7 +1136,7 @@ class Trajectory:
         size = (int(self.WIDTH * ratio), int(self.HEIGHT * ratio))
 
         # 寫 預測結果
-        video_path = f"{self.video_path}/{self.video_name}_step_{self.step}_predict_12.mp4"
+        video_path = f"{self.video_path}/{self.video_name}_predict_12.mp4"
         self.Write_Video(video_path, size)
 
         # 透視變形
@@ -1404,29 +1156,12 @@ class Trajectory:
                 if self.count >= total_frames - 12:
                     break
                 self.Write_Frame_to_Video(image_CV)
+                success, image = cap.read()
                 pbar.update(1)
-
-                n = 0
-                while True:
-                    n += 1
-                    cap.grab()
-                    if n == self.step:
-                        success, image = cap.retrieve()
-                        break
 
         # For releasing cap and out.
         cap.release()
         self.Release_Video()
-
-        # write bouncing list to csv file
-        self.Write_Bounce_Location()
-
-        # output bouncing analyze img
-        self.Draw_Bounce_Analysis()
-        self.Save_Bounce_Analysis()
-
-        # For saving bounce map.
-        self.Save_Bounce_Location()
 
         end = time.time()
         total_time = end - start
@@ -1437,8 +1172,5 @@ class Trajectory:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--step", type=int, default=1, help="step number")
-    opt = parser.parse_args()
-    trajectory = Trajectory(step=opt.step)
+    trajectory = Trajectory()
     trajectory.main()
