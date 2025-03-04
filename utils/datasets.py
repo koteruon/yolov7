@@ -27,7 +27,7 @@ from torchvision.utils import save_image
 from tqdm import tqdm
 
 from trajectory import Trajectory
-from trajectory_pitching_machine import Trajectory as Trajectory_Patching_Machine
+from trajectory_pitching_machine import Trajectory as Trajectory_Pitching_Machine
 from utils.general import (
     check_requirements,
     clean_str,
@@ -312,11 +312,13 @@ class LoadCamera:  # for inference
         self.trajectory.Set_Frame_Info(frame_height, frame_width, self.fps)
         self.trajectory.Mark_Perspective_Distortion_Point(img0, frame_width, frame_height)
 
-    def trajectory_patchin_machine_init(self, img0):
-        self.trajectory_patching_machine = Trajectory_Patching_Machine()
+    def trajectory_pitching_machine_init(self, img0):
+        self.trajectory_pitching_machine = Trajectory_Pitching_Machine()
+        self.trajectory_pitching_machine.Create_Video_Output_Path(realtime=True)
         frame_height, frame_width, frame_channel = img0.shape
-        self.trajectory_patching_machine.Set_Frame_Info(frame_height, frame_width, self.fps)
-        self.trajectory_patching_machine.Mark_Perspective_Distortion_Point(img0, frame_width, frame_height)
+        self.trajectory_pitching_machine.Set_Frame_Info(frame_height, frame_width, self.fps)
+        self.trajectory_pitching_machine.Mark_Perspective_Distortion_Point(img0, frame_width, frame_height)
+        return self.trajectory_pitching_machine
 
     def __init__(
         self,
@@ -332,7 +334,7 @@ class LoadCamera:  # for inference
         width=1080,
         opencv_or_ffmpeg="opencv",
         trajectory=False,
-        trajectory_patching_machine=False,
+        trajectory_pitching_machine=False,
     ):
         self.device = device
         self.half = half
@@ -346,7 +348,7 @@ class LoadCamera:  # for inference
         self.fps = fps
         self.opencv_or_ffmpeg = opencv_or_ffmpeg
         self.trajectory = trajectory
-        self.trajectory_patching_machine = trajectory_patching_machine
+        self.trajectory_pitching_machine = trajectory_pitching_machine
         if self.opencv_or_ffmpeg == "opencv":
             self.cap = cv2.VideoCapture(self.source)  # video capture object
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # set buffer size
@@ -364,8 +366,8 @@ class LoadCamera:  # for inference
             img0 = np.frombuffer(in_bytes, np.uint8).reshape([self.height, self.width, 3])
         if self.trajectory:
             self.trajectory_init(img0)  # 落點
-        if self.trajectory_patching_machine:
-            self.trajectory_patchin_machine_init(img0)
+        if self.trajectory_pitching_machine:
+            self.trajectory_pitching_machine_init(img0)
         self.model_choices = model_choices  # yolo or tracknet
         self.tracknet_image_list = None
 
@@ -479,8 +481,8 @@ class LoadCamera:  # for inference
 
         if self.trajectory:
             return img, img0, self.trajectory
-        elif self.trajectory_patching_machine:
-            return img, img0, self.trajectory_patching_machine
+        elif self.trajectory_pitching_machine:
+            return img, img0, self.trajectory_pitching_machine
         else:
             return img, img0, False
 

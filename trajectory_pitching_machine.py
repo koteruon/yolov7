@@ -1,5 +1,4 @@
 import argparse
-import datetime
 import json
 import math
 import os
@@ -24,10 +23,10 @@ from tqdm import tqdm
 class Ball:
     def __init__(self, center, bbox_size, frame_number, color_bgr_255, frame_width):
         self.ball_limit = 5  # 限制最多儲存多少歷史紀錄
-        self.trajectory_ball_limit = 9  # 限制最多儲存多少歷史紀錄用於推算軌跡落點
+        self.trajectory_ball_limit = 9  # 限制最多儲存多少歷史紀錄用於推算軌跡落點 (包含新的點)
         self.show_ball_limit = 12  # 限制最多儲存多少歷史紀錄用於畫畫用
         self.bounce_ball_limit = 6  # 限制最多儲存多少歷史紀錄用於畫畫用
-        self.frame_limit = 20  # 限制相隔多少frame以後自動刪除
+        self.frame_limit = 6  # 限制相隔多少frame以後自動刪除
         self.center_history = [np.array(center)]  # 初始化中心點歷史紀錄
         self.trajectory_center_history = [np.array(center)]  # 初始化中心點歷史紀錄用於推算軌跡落點
         self.show_center_history = [np.array(center)]  # 初始化中心點歷史紀錄用於畫畫用
@@ -127,13 +126,15 @@ class Ball:
     def sigmoid(self, x):
         return 1 / (1 + np.exp(-10 * (x - 0.5)))  # 调整参数以控制形状
 
-    def calculate_weights(self):
+    def calculate_weights(self, direction_score):
         # 計算權重
         historical_iou = self.get_average_iou()
         iou_weight = self.sigmoid(historical_iou)  # IOU 的權重
         x_position_ratio = self.average_center[0] / self.frame_width  # 球在畫面中的x位置比率 [0, 1]
         distance_weight = 0.45 + x_position_ratio * 0.25  # 離右邊越近，距離權重越高
-        direction_weight = max(0.0, -0.2 + x_position_ratio * 0.9)  # 離右邊越近，方向權重越高
+        direction_weight = (
+            max(0.0, -0.2 + x_position_ratio * 0.9) if direction_score != 0 else 0.0
+        )  # 離右邊越近，方向權重越高
         aspect_ratio_weight = 0.25 + x_position_ratio * 0.25  # 離右邊越近，距離權重越高
         total_weight = iou_weight + direction_weight + distance_weight + aspect_ratio_weight
 
@@ -167,7 +168,7 @@ class BallTracker:
         self.balls_history = []  # 儲存歷史所有球的資訊
         self.ball_count = 0
         self.colormap = plt.get_cmap("Paired")  # 选择一个 colormap
-        self.score_threshold = 0.5  # 分數筏值 0.5
+        self.score_threshold = 0.5  # 分數筏值 0.65
         self.count_ball_threahold = 15  # 60fps = 15, 120fps = 40 # 有多少個歷史軌跡內才算發球
         self.count_ball_add_last_frame_number = 0  # 最後一個紀錄到發球軌跡的frame number
         self.count_balls = []  # 發球追蹤中
@@ -337,9 +338,6 @@ class BallTracker:
                 )
                 max_distance = np.linalg.norm(weighted_diff) / 4
 
-                # 獲取權重
-                iou_weight, direction_weight, distance_weight, aspect_ratio_weight = ball.calculate_weights()
-
                 # 計算各個因素的分數
                 iou_score = iou  # IOU 越大分數越高
                 direction_score = direction_similarity  # 方向性越相似分數越高
@@ -352,6 +350,11 @@ class BallTracker:
                 max_aspect_ratio_diff = 1  # 假設長寬比的最大差異值
                 aspect_ratio_normalized = min(aspect_ratio_diff / max_aspect_ratio_diff, 1)  # 將差異規範化到 [0, 1]
                 aspect_ratio_score = 1 - aspect_ratio_normalized  # 差異越小分數越高，範圍 [0, 1]
+
+                # 獲取權重
+                iou_weight, direction_weight, distance_weight, aspect_ratio_weight = ball.calculate_weights(
+                    direction_score
+                )
 
                 # 綜合得分公式：根據各個因素的分數和權重進行加權平均
                 score = (
@@ -674,7 +677,8 @@ class Trajectory:
 
     def Load_Mark_Point(self, csv_path, PT_data):
         df = pd.read_csv(csv_path)
-        df = df[df["video_id"] == self.video_name]
+        video_name = self.video_name if self.video_name != "Realtime" else self.realtime_folder_name
+        df = df[df["video_id"] == video_name]
         if not df.empty:
             row = df.iloc[0]  # 取第一行數據
             PT_data["point_x"] = [row[f"point_x{i}"] for i in range(1, 5)]
@@ -685,8 +689,9 @@ class Trajectory:
 
     def Save_Mark_Point(self, csv_path, PT_data):
         df = pd.read_csv(csv_path)
+        video_name = self.video_name if self.video_name != "Realtime" else self.realtime_folder_name
         new_row = {
-            "video_id": self.video_name,
+            "video_id": video_name,
             "point_x1": PT_data["point_x"][0],
             "point_x2": PT_data["point_x"][1],
             "point_x3": PT_data["point_x"][2],
@@ -696,8 +701,8 @@ class Trajectory:
             "point_y3": PT_data["point_y"][2],
             "point_y4": PT_data["point_y"][3],
         }
-        if self.video_name in df["video_id"].values:
-            df.loc[df["video_id"] == self.video_name, new_row.keys()] = new_row.values()
+        if video_name in df["video_id"].values:
+            df.loc[df["video_id"] == video_name, new_row.keys()] = new_row.values()
         else:
             new_data = pd.DataFrame([new_row])
             df = pd.concat([df, new_data], ignore_index=True)
@@ -804,11 +809,15 @@ class Trajectory:
         else:
             self.ball_tracker.no_detect_update_balls(self.count)
 
-    def parse_args(self):
-        parser = argparse.ArgumentParser(description="Predict")
-        parser.add_argument("--input", required=True, type=str, help="Input video")
-        args = parser.parse_args()
-        return args
+    def Draw_Parabola(self, a, b, c, image):
+        x = np.arange(0, self.frame_width, 5)  # 以間隔 5 取樣
+        y = a * x**2 + b * x + c  # 計算對應的 y 值
+        x, y = x.astype(np.int32), y.astype(np.int32)  # 轉為整數座標
+        mask = (y >= 0) & (y < self.frame_height)
+        x, y = x[mask], y[mask]
+        points = np.column_stack((x, y))
+        cv2.polylines(image, [points], isClosed=False, color=(0, 0, 255), thickness=2)
+        return image
 
     def Detect_Trajectory(self, image):
         # 針對每一貞做運算
@@ -824,8 +833,8 @@ class Trajectory:
                 x_tmp = np.array([])
                 y_tmp = np.array([])
             else:
-                x_tmp = q_array[:, 0]
-                y_tmp = q_array[:, 1]
+                x_tmp = q_array[:-1, 0]
+                y_tmp = q_array[:-1, 1]
             ## 落點預測 ######################################################################################################
             if len(x_tmp) >= 3:
                 # 檢查是否嚴格遞增或嚴格遞減,(軌跡方向是否相同)
@@ -833,13 +842,16 @@ class Trajectory:
                 # 累積有三顆球的軌跡向右, 可計算拋物線
                 if direction == "right":
                     bounced = False
-                    x_c_pred, y_c_pred = ball.new_center
-                    parabola = self.Solve_Parabola(x_tmp, y_tmp)
-                    a, b, c = parabola[0]
-                    fit = a * x_c_pred**2 + b * x_c_pred + c
-                    # 差距 10 個 pixel 以上視為脫離預測的拋物線
-                    bounced = abs(y_c_pred - fit) >= 10
-                    if not self.use_parabola:
+                    if self.use_parabola:
+                        x_c_pred, y_c_pred = ball.new_center
+                        parabola = self.Solve_Parabola(x_tmp, y_tmp)
+                        a, b, c = parabola[0]
+                        fit = a * x_c_pred**2 + b * x_c_pred + c
+                        # 差距 10 個 pixel 以上視為脫離預測的拋物線
+                        bounced = abs(y_c_pred - fit) >= 10
+                        if self.show_debug_parabola:
+                            image_CV = self.Draw_Parabola(a, b, c, image_CV)
+                    else:
                         vy = np.diff(y_tmp)  # 計算速度（差分）計算最近 8 幀的垂直速度
                         window_size = 1  # 平滑窗口大小，可根據需要調整
                         smoothed_vy = np.convolve(
@@ -851,9 +863,12 @@ class Trajectory:
                         else:
                             bounced = False
                     if bounced:
-                        x_last = x_tmp[-2]
+                        x_last = x_tmp[-1]
                         # 預測球在球桌上的落點, x_drop : 本次與前次的中點, y_drop : x_drop 於拋物線上的位置
-                        x_drop = int(round((x_c_pred + x_last) / 2, 0))
+                        if self.bound_calcualte_avarage:
+                            x_drop = int(round((x_c_pred + x_last) / 2, 0))
+                        else:
+                            x_drop = x_last
                         y_drop = int(round(a * x_drop**2 + b * x_drop + c, 0))
                         # 繪製本次球體位置, Golden
                         cv2.circle(image_CV, (x_c_pred, y_c_pred), 5, (0, 215, 255), 4)
@@ -903,12 +918,22 @@ class Trajectory:
                 self.frame_width - (self.miniboard_width + self.miniboard_edge * 2) :,
             ] = self.img_opt
 
+        self.freetype.putText(
+            image_CV,
+            f"幀數: {self.count}",
+            (10, 20),
+            36,
+            (0, 255, 255),
+            -1,
+            cv2.LINE_AA,
+            False,
+        )
         if self.show_debug_output:
             for idx, ball in enumerate(self.ball_tracker.balls, 1):
                 cv2.putText(
                     image_CV,
                     f"Score : {ball.score_history[-1]:.2f}",
-                    (10, 40 + 40 * idx),
+                    (10, 60 + 40 * idx),
                     cv2.FONT_HERSHEY_TRIPLEX,
                     1,
                     tuple(map(int, ball.color_bgr_255)),
@@ -916,16 +941,6 @@ class Trajectory:
                     cv2.LINE_AA,
                 )
         else:
-            self.freetype.putText(
-                image_CV,
-                f"幀數: {self.count}",
-                (10, 20),
-                36,
-                (0, 255, 255),
-                -1,
-                cv2.LINE_AA,
-                False,
-            )
             self.freetype.putText(
                 image_CV,
                 f"回合數: {self.ball_tracker.count_ball_rounds}",
@@ -1026,7 +1041,7 @@ class Trajectory:
         # 影片跟目錄3
         max_folder = ""
         if not realtime:
-            max_folder = "C0002_20250303_01"  # realtime3
+            max_folder = "C0002_60fps_20250303_01"  # realtime3
         max_num = -1
         root_path = f"./runs/detect"
         pattern = re.compile(r"^realtime(\d+)$")
@@ -1039,16 +1054,17 @@ class Trajectory:
                         max_num = num
                         max_folder = folder_name
         root_path = os.path.join(root_path, max_folder)
+        self.realtime_folder_name = max_folder
         sub_max_num = -1
         sub_max_folder = ""
         if not realtime:
             sub_max_folder = None
-        sub_pattern = re.compile(r"^Realtime(\d+)$")
+        sub_pattern = re.compile(r"^Realtime(\d*)$")
         if sub_max_folder != None and sub_max_folder == "":
             for folder_name in os.listdir(root_path):
                 match = sub_pattern.match(folder_name)
                 if match:
-                    num = int(match.group(1))
+                    num = int(match.group(1) if match.group(1) != "" else 1)
                     if num > sub_max_num:
                         sub_max_num = num
                         sub_max_folder = folder_name
@@ -1057,9 +1073,9 @@ class Trajectory:
         print(f"root_path: {root_path}")
 
         if not realtime:
-            video_fullname = "C0002.MP4"
+            video_fullname = "C0002_60fps.MP4"
         else:
-            video_fullname = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+            video_fullname = "Realtime.mp4"
 
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
@@ -1080,8 +1096,6 @@ class Trajectory:
         # 建立目錄
         output_path = f"./inference/output"
         self.video_path = self.Create_Output_Dir(output_path)
-
-        self.Create_Video_Output_Path()
 
         # miniboard 的大小
         self.miniboard_width = 544  # 原先為548
@@ -1106,8 +1120,10 @@ class Trajectory:
         # 顯示參數
         self.is_show_bounce = True
 
+        self.bound_calcualte_avarage = False
         self.analysis_output = True
-        self.show_debug_output = False
+        self.show_debug_output = False  # debug
+        self.show_debug_parabola = False  # debug
         self.use_parabola = True
         self.freetype = cv2.freetype.createFreeType2()
         self.freetype.loadFontData(fontFileName="ttf/MSJH.TTC", id=0)
@@ -1124,7 +1140,9 @@ class Trajectory:
         self.count += 1
 
     ### 後處理從此開始 ###
-    def main(self):
+    def main(self, realtime=False):
+        self.Create_Video_Output_Path(realtime=realtime)
+
         start = time.time()
 
         # 讀影片
@@ -1172,5 +1190,9 @@ class Trajectory:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--realtime", action="store_true")
+    opt = parser.parse_args()
+
     trajectory = Trajectory()
-    trajectory.main()
+    trajectory.main(realtime=opt.realtime)

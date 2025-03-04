@@ -111,7 +111,7 @@ class YoloV7:
             width=frame_width,
             opencv_or_ffmpeg=opt.opencv_or_ffmpeg,
             trajectory=False,
-            trajectory_patching_machine=False,
+            trajectory_pitching_machine=True,
         )
         process_video = ProcessVideos()
 
@@ -216,17 +216,21 @@ class YoloV7:
                             fps, w, h = 60, im0.shape[1], im0.shape[0]
                             vid_writer = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
                             # vid_writer = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*"FFV1"), fps, (w, h))
+                            trajectory = dataset.trajectory_pitching_machine_init(im0)
                             if trajectory:
                                 output_video_path = str(sub_save_path / p.name) + "_predict_12.mp4"
-                                trajectory.Write_Video(output_video_path, (1080, 1920))
+                                trajectory.Write_Video(output_video_path, (w, h))
                             print("開始錄影...")
 
                     if key == ord("t"):
                         if is_recording:
                             if trajectory:
-                                for text, video in tqdm(zip(text_buffer, video_buffer), desc="軌跡落點"):
-                                    trajectory.Read_Yolo_Label_One_Frame(balls=text.value())
-                                    image_CV = trajectory.Detect_Trajectory(im0)
+                                for text, video in tqdm(
+                                    zip(text_buffer, video_buffer), total=len(text_buffer), desc="軌跡落點"
+                                ):
+                                    for txt_path, lines in text.items():
+                                        trajectory.Read_Yolo_Label_One_Frame(balls=lines)
+                                    image_CV = trajectory.Detect_Trajectory(video)
                                     image_CV = trajectory.Draw_On_Image(image_CV)
                                     trajectory.Next_Count()
                                     trajectory.Write_Frame_to_Video(image_CV)
