@@ -216,6 +216,7 @@ class YoloV7:
                             fps, w, h = 60, im0.shape[1], im0.shape[0]
                             vid_writer = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
                             # vid_writer = cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*"FFV1"), fps, (w, h))
+                            score_trajectory = dataset.trajectory_pitching_machine_init(im0)
                             trajectory = dataset.trajectory_pitching_machine_init(im0)
                             if trajectory:
                                 output_video_path = str(sub_save_path / p.name) + "_predict_12.mp4"
@@ -224,6 +225,15 @@ class YoloV7:
 
                     if key == ord("t"):
                         if is_recording:
+                            if score_trajectory:
+                                for text, video in tqdm(
+                                    zip(text_buffer, video_buffer), total=len(text_buffer), desc="計算分數"
+                                ):
+                                    for txt_path, lines in text.items():
+                                        score_trajectory.Read_Yolo_Label_One_Frame(balls=lines)
+                                    score_trajectory.Detect_Trajectory(video)
+                                    score_trajectory.Next_Count()
+                                score_trajectory.get_score(is_printing=True)
                             if trajectory:
                                 for text, video in tqdm(
                                     zip(text_buffer, video_buffer), total=len(text_buffer), desc="軌跡落點"

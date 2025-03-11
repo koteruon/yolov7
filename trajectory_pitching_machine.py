@@ -1005,10 +1005,16 @@ class Trajectory:
                 )
 
         # 比分
-        score = self.ball_tracker.count_ball_get_score()
+        score = self.get_score()
         self.freetype.putText(image_CV, f"{score[0]}:{score[1]}", (850, 25), 250, (0, 255, 255), -1, cv2.LINE_AA, False)
 
         return image_CV
+
+    def get_score(self, is_printing=False):
+        score = self.ball_tracker.count_ball_get_score()
+        if is_printing:
+            print(f"{score[0]}:{score[1]}")
+        return score
 
     def Draw_Speed_Under_Ball(self, image):
         if self.count in self.record_ball:
@@ -1041,7 +1047,7 @@ class Trajectory:
         # 影片跟目錄3
         max_folder = ""
         if not realtime:
-            max_folder = "C0002_60fps_20250303_01"  # realtime3
+            max_folder = "C0003_60fps_20250303_01"  # realtime3
         max_num = -1
         root_path = f"./runs/detect"
         pattern = re.compile(r"^realtime(\d+)$")
@@ -1073,7 +1079,7 @@ class Trajectory:
         print(f"root_path: {root_path}")
 
         if not realtime:
-            video_fullname = "C0002_60fps.MP4"
+            video_fullname = "C0003_60fps.MP4"
         else:
             video_fullname = "Realtime.mp4"
 
@@ -1082,8 +1088,7 @@ class Trajectory:
         self.input_path = os.path.join(root_path, video_fullname)
 
         if sub_max_folder != None:
-            self.video_path = os.path.join(self.video_path, max_folder, sub_max_folder)
-        Path(self.video_path).mkdir(parents=True, exist_ok=True)
+            self.video_path = root_path
 
         # yolo labels path
         self.label_path = os.path.join(root_path, "labels")
