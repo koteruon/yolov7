@@ -848,7 +848,7 @@ class Trajectory:
                         a, b, c = parabola[0]
                         fit = a * x_c_pred**2 + b * x_c_pred + c
                         # 差距 10 個 pixel 以上視為脫離預測的拋物線
-                        bounced = abs(y_c_pred - fit) >= 10
+                        bounced = abs(y_c_pred - fit) >= 5
                         if self.show_debug_parabola:
                             image_CV = self.Draw_Parabola(a, b, c, image_CV)
                     else:
@@ -1047,7 +1047,7 @@ class Trajectory:
         # 影片跟目錄3
         max_folder = ""
         if not realtime:
-            max_folder = "C0003_60fps_20250303_01"  # realtime3
+            max_folder = "pitching_machine_20250317"  # realtime3
         max_num = -1
         root_path = f"./runs/detect"
         pattern = re.compile(r"^realtime(\d+)$")
@@ -1079,7 +1079,7 @@ class Trajectory:
         print(f"root_path: {root_path}")
 
         if not realtime:
-            video_fullname = "C0003_60fps.MP4"
+            video_fullname = "pitching_machine_20250317.mp4"
         else:
             video_fullname = "Realtime.mp4"
 
