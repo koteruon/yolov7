@@ -244,6 +244,7 @@ class YoloV7:
                                     image_CV = trajectory.Draw_On_Image(image_CV)
                                     trajectory.Next_Count()
                                     trajectory.Write_Frame_to_Video(image_CV)
+                                trajectory.Release_Video()
                             for text in tqdm(list(text_buffer), desc="處理text資料"):
                                 for txt_path, lines in text.items():
                                     if lines:

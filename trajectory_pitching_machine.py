@@ -168,7 +168,7 @@ class BallTracker:
         self.balls_history = []  # 儲存歷史所有球的資訊
         self.ball_count = 0
         self.colormap = plt.get_cmap("Paired")  # 选择一个 colormap
-        self.score_threshold = 0.5  # 分數筏值 0.65
+        self.score_threshold = 0.4  # 分數筏值 0.65
         self.count_ball_threahold = 15  # 60fps = 15, 120fps = 40 # 有多少個歷史軌跡內才算發球
         self.count_ball_add_last_frame_number = 0  # 最後一個紀錄到發球軌跡的frame number
         self.count_balls = []  # 發球追蹤中
