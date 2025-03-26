@@ -233,7 +233,11 @@ class YoloV7:
                                         score_trajectory.Read_Yolo_Label_One_Frame(balls=lines)
                                     score_trajectory.Detect_Trajectory(video)
                                     score_trajectory.Next_Count()
-                                score_trajectory.get_score(is_printing=True)
+                                score = score_trajectory.get_score(is_printing=True)
+                                scoreboard_CV = np.zeros((720, 1280, 3), dtype=np.uint8)
+                                scoreboard_CV = score_trajectory.show_score(scoreboard_CV, score)
+                                cv2.imshow("Scoreboard", scoreboard_CV)
+                                cv2.waitKey(100)
                             if trajectory:
                                 for text, video in tqdm(
                                     zip(text_buffer, video_buffer), total=len(text_buffer), desc="軌跡落點"

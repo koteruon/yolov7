@@ -1016,6 +1016,16 @@ class Trajectory:
             print(f"{score[0]}:{score[1]}")
         return score
 
+    def show_score(self, scoreboard_CV, score):
+        x = 350
+        y = 150
+        text = f"{score[0]} : {score[1]}"
+        font_height = 300
+        color = (0, 255, 255)
+        thickness = -1
+        self.freetype.putText(scoreboard_CV, text, (x, y), font_height, color, thickness, cv2.LINE_AA, False)
+        return scoreboard_CV
+
     def Draw_Speed_Under_Ball(self, image):
         if self.count in self.record_ball:
             # word position
