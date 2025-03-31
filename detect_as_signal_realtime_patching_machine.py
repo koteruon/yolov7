@@ -221,6 +221,11 @@ class YoloV7:
                             if trajectory:
                                 output_video_path = str(sub_save_path / p.name) + "_predict_12.mp4"
                                 trajectory.Write_Video(output_video_path, (w, h))
+                            score = [0, 0]
+                            scoreboard_CV = np.zeros((720, 1280, 3), dtype=np.uint8)
+                            scoreboard_CV = score_trajectory.show_score(scoreboard_CV, score)
+                            cv2.imshow("Scoreboard", scoreboard_CV)
+                            cv2.waitKey(100)
                             print("開始錄影...")
 
                     if key == ord("t"):
