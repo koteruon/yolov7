@@ -527,22 +527,46 @@ class Trajectory:
 
         return output
 
+    def Load_Mark_Point(self, csv_path, PT_data):
+        df = pd.read_csv(csv_path)
+        if not df.empty:
+            row = df.iloc[0]  # 取第一行數據
+            PT_data["point_x"] = [row[f"point_x{i}"] for i in range(1, 5)]
+            PT_data["point_y"] = [row[f"point_y{i}"] for i in range(1, 5)]
+            return True
+        else:
+            return False
+
+    def Save_Mark_Point(self, csv_path, PT_data):
+        df = pd.read_csv(csv_path)
+        new_row = {
+            "point_x1": PT_data["point_x"][0],
+            "point_x2": PT_data["point_x"][1],
+            "point_x3": PT_data["point_x"][2],
+            "point_x4": PT_data["point_x"][3],
+            "point_y1": PT_data["point_y"][0],
+            "point_y2": PT_data["point_y"][1],
+            "point_y3": PT_data["point_y"][2],
+            "point_y4": PT_data["point_y"][3],
+        }
+        df = pd.DataFrame([new_row])
+        df.to_csv(csv_path, index=False)
+
     def Mark_Perspective_Distortion_Point(self, image, frame_width, frame_height):
         # 點選透視變形位置, 順序為:左上,左下,右下,右上
         PT_data = {"img": image.copy(), "point_x": [], "point_y": []}
-        # TODO: 測試用
-        PT_data["point_x"] = [508, 163, 1905, 1555]
-        PT_data["point_y"] = [679, 827, 849, 686]
-        # TODO 測試用
-        # cv2.namedWindow("PIC2 (press Q to quit)", 0)
-        # cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
-        # cv2.setMouseCallback("PIC2 (press Q to quit)", self.Draw_Circle, PT_data)
-        # while True:
-        #     cv2.imshow("PIC2 (press Q to quit)", PT_data["img"])
-        #     if cv2.waitKey(2) == ord("q"):
-        #         print(PT_data)
-        #         cv2.destroyWindow("PIC2 (press Q to quit)")
-        #         break
+        table_csv_path = r"niag/focus_bbox.csv"
+        if not self.Load_Mark_Point(table_csv_path, PT_data):
+            cv2.namedWindow("PIC2 (press Q to quit)", 0)
+            cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
+            cv2.setMouseCallback("PIC2 (press Q to quit)", self.Draw_Circle, PT_data)
+            while True:
+                cv2.imshow("PIC2 (press Q to quit)", PT_data["img"])
+                if cv2.waitKey(2) == ord("q"):
+                    print(PT_data)
+                    cv2.destroyWindow("PIC2 (press Q to quit)")
+                    break
+            self.Save_Mark_Point(table_csv_path, PT_data)
 
         # PerspectiveTransform
         upper_left = [PT_data["point_x"][0], PT_data["point_y"][0]]
@@ -888,6 +912,32 @@ class Trajectory:
         return ball_direction, ball_direction_last
 
     def Draw_On_Image(self, image_CV, ball_direction):
+        image_CV_height, image_CV_width, _ = image_CV.shape
+        bounce_analyze_img = self.bounce_analyze_img
+        set_height = 325
+        set_radio = 584 / 325
+        cv2.resize(bounce_analyze_img, (int(set_height), int(set_height * set_radio)))
+        bounce_analyze_img_height, bounce_analyze_img_width, _ = bounce_analyze_img.shape
+        image_CV[
+            image_CV_height - bounce_analyze_img_height : image_CV_height,
+            image_CV_width - bounce_analyze_img_width : image_CV_width,
+            :,
+        ] = bounce_analyze_img
+
+        img_opt_bounce_location = self.img_opt_bounce_location
+        set_height = 325
+        set_radio = 584 / 325
+        cv2.resize(img_opt_bounce_location, (int(set_height), int(set_height * set_radio)))
+        img_opt_bounce_location_height, img_opt_bounce_location_width, _ = img_opt_bounce_location.shape
+        image_CV[
+            image_CV_height - img_opt_bounce_location_height : image_CV_height,
+            image_CV_width
+            - bounce_analyze_img_width
+            - img_opt_bounce_location_width : image_CV_width
+            - bounce_analyze_img_width,
+            :,
+        ] = img_opt_bounce_location
+
         # draw current frame prediction and previous 11 frames as yellow circle, total: 12 frames
         for i in range(12):
             if self.q[i] != (-1, -1):
@@ -934,120 +984,120 @@ class Trajectory:
         #         )
 
         # # 標示出球速
-        # if not self.only_speed:
-        #     if self.MAX_velo > 113:
-        #         cv2.putText(
-        #             image_CV,
-        #             "          " + "Loss",
-        #             (10, 40),
-        #             cv2.FONT_HERSHEY_TRIPLEX,
-        #             1,
-        #             (0, 255, 255),
-        #             1,
-        #             cv2.LINE_AA,
-        #         )
-        #     elif ball_direction is not None:
-        #         cv2.putText(
-        #             image_CV,
-        #             "          " + str(self.shotspeed),
-        #             (10, 40),
-        #             cv2.FONT_HERSHEY_TRIPLEX,
-        #             1,
-        #             (0, 255, 255),
-        #             1,
-        #             cv2.LINE_AA,
-        #         )
-        #     # 無法辨別球路方向時
-        #     else:
-        #         cv2.putText(
-        #             image_CV,
-        #             "          " + "0",
-        #             (10, 40),
-        #             cv2.FONT_HERSHEY_TRIPLEX,
-        #             1,
-        #             (0, 255, 255),
-        #             1,
-        #             cv2.LINE_AA,
-        #         )
-        # else:
-        #     if self.MAX_velo > 113:
-        #         cv2.putText(
-        #             image_CV,
-        #             "         " + "Loss",
-        #             (10, 80),
-        #             cv2.FONT_HERSHEY_TRIPLEX,
-        #             2,
-        #             (0, 255, 255),
-        #             2,
-        #             cv2.LINE_AA,
-        #         )
-        #     elif ball_direction is not None:
-        #         cv2.putText(
-        #             image_CV,
-        #             "         " + str(self.shotspeed),
-        #             (10, 80),
-        #             cv2.FONT_HERSHEY_TRIPLEX,
-        #             2,
-        #             (0, 255, 255),
-        #             2,
-        #             cv2.LINE_AA,
-        #         )
-        #     # 無法辨別球路方向時
-        #     else:
-        #         cv2.putText(
-        #             image_CV,
-        #             "         " + "0",
-        #             (10, 80),
-        #             cv2.FONT_HERSHEY_TRIPLEX,
-        #             2,
-        #             (0, 255, 255),
-        #             2,
-        #             cv2.LINE_AA,
-        #         )
+        if not self.only_speed:
+            if self.MAX_velo > 113:
+                cv2.putText(
+                    image_CV,
+                    "          " + "Loss",
+                    (10, 40),
+                    cv2.FONT_HERSHEY_TRIPLEX,
+                    1,
+                    (0, 255, 255),
+                    1,
+                    cv2.LINE_AA,
+                )
+            elif ball_direction is not None:
+                cv2.putText(
+                    image_CV,
+                    "          " + str(self.shotspeed),
+                    (10, 40),
+                    cv2.FONT_HERSHEY_TRIPLEX,
+                    1,
+                    (0, 255, 255),
+                    1,
+                    cv2.LINE_AA,
+                )
+            # 無法辨別球路方向時
+            else:
+                cv2.putText(
+                    image_CV,
+                    "          " + "0",
+                    (10, 40),
+                    cv2.FONT_HERSHEY_TRIPLEX,
+                    1,
+                    (0, 255, 255),
+                    1,
+                    cv2.LINE_AA,
+                )
+        else:
+            if self.MAX_velo > 113:
+                cv2.putText(
+                    image_CV,
+                    "         " + "Loss",
+                    (10, 80),
+                    cv2.FONT_HERSHEY_TRIPLEX,
+                    2,
+                    (0, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+            elif ball_direction is not None:
+                cv2.putText(
+                    image_CV,
+                    "         " + str(self.shotspeed),
+                    (10, 80),
+                    cv2.FONT_HERSHEY_TRIPLEX,
+                    2,
+                    (0, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+            # 無法辨別球路方向時
+            else:
+                cv2.putText(
+                    image_CV,
+                    "         " + "0",
+                    (10, 80),
+                    cv2.FONT_HERSHEY_TRIPLEX,
+                    2,
+                    (0, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
 
         # # 其他左上角的文字
-        # if not self.only_speed:
-        #     cv2.putText(
-        #         image_CV,
-        #         "Speed:",
-        #         (10, 40),
-        #         cv2.FONT_HERSHEY_TRIPLEX,
-        #         1,
-        #         (0, 255, 255),
-        #         1,
-        #         cv2.LINE_AA,
-        #     )
-        #     cv2.putText(
-        #         image_CV,
-        #         "(Km/Hr)",
-        #         (260, 40),
-        #         cv2.FONT_HERSHEY_TRIPLEX,
-        #         1,
-        #         (0, 255, 255),
-        #         1,
-        #         cv2.LINE_AA,
-        #     )
-        # else:
-        #     cv2.putText(
-        #         image_CV,
-        #         "Speed:",
-        #         (10, 80),
-        #         cv2.FONT_HERSHEY_TRIPLEX,
-        #         2,
-        #         (0, 255, 255),
-        #         2,
-        #         cv2.LINE_AA,
-        #     )
-        #     cv2.putText(
-        #         image_CV,
-        #         "(Km/Hr)",
-        #         (10, 160),
-        #         cv2.FONT_HERSHEY_TRIPLEX,
-        #         2,
-        #         (0, 255, 255),
-        #         2,
-        #         cv2.LINE_AA,
-        #     )
+        if not self.only_speed:
+            cv2.putText(
+                image_CV,
+                "Speed:",
+                (10, 40),
+                cv2.FONT_HERSHEY_TRIPLEX,
+                1,
+                (0, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
+            cv2.putText(
+                image_CV,
+                "(Km/Hr)",
+                (260, 40),
+                cv2.FONT_HERSHEY_TRIPLEX,
+                1,
+                (0, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
+        else:
+            cv2.putText(
+                image_CV,
+                "Speed:",
+                (10, 80),
+                cv2.FONT_HERSHEY_TRIPLEX,
+                2,
+                (0, 255, 255),
+                2,
+                cv2.LINE_AA,
+            )
+            cv2.putText(
+                image_CV,
+                "(Km/Hr)",
+                (10, 160),
+                cv2.FONT_HERSHEY_TRIPLEX,
+                2,
+                (0, 255, 255),
+                2,
+                cv2.LINE_AA,
+            )
         # if not self.only_speed:
         #     cv2.putText(
         #         image_CV,
@@ -1059,16 +1109,16 @@ class Trajectory:
         #         1,
         #         cv2.LINE_AA,
         #     )
-        cv2.putText(
-            image_CV,
-            f"Frame : {self.count}",
-            (10, 40),
-            cv2.FONT_HERSHEY_TRIPLEX,
-            1,
-            (0, 255, 255),
-            1,
-            cv2.LINE_AA,
-        )
+        # cv2.putText(
+        #     image_CV,
+        #     f"Frame : {self.count}",
+        #     (10, 40),
+        #     cv2.FONT_HERSHEY_TRIPLEX,
+        #     1,
+        #     (0, 255, 255),
+        #     1,
+        #     cv2.LINE_AA,
+        # )
 
         return image_CV
 

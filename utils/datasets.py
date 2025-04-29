@@ -427,26 +427,10 @@ class LoadCamera:  # for inference
         else:
             img0 = self.read_frame_from_ffmpeg()
 
-        if self.trajectory:
+        if not self.trajectory_pitching_machine:
             key = cv2.waitKey(1)
-            if key == ord("q"):  # q to quit
-                self.trajectory.Write_Bounce_Location()
-                # output bouncing analyze img
-                self.trajectory.Draw_Bounce_Analysis()
-                self.trajectory.Save_Bounce_Analysis()
-                # For saving bounce map.
-                self.trajectory.Save_Bounce_Location()
-                # For saving bounce map.
-                self.trajectory.Save_Bounce_Location()
-                # For saving speedHist
-                self.trajectory.Draw_SpeedHist()
-
-                self.cap.release()
-                cv2.destroyAllWindows()
-                raise StopIteration
-
-            if key == ord("e"):  # e to end
-                if self.trajectory:
+            if self.trajectory:
+                if key == ord("q"):  # q to quit
                     self.trajectory.Write_Bounce_Location()
                     # output bouncing analyze img
                     self.trajectory.Draw_Bounce_Analysis()
@@ -457,11 +441,30 @@ class LoadCamera:  # for inference
                     self.trajectory.Save_Bounce_Location()
                     # For saving speedHist
                     self.trajectory.Draw_SpeedHist()
-                    del self.trajectory
-                    self.trajectory = None
 
-            if key == ord("s"):  # s to start
-                if not self.trajectory:
+                    self.cap.release()
+                    cv2.destroyAllWindows()
+                    raise StopIteration
+                if key == ord("e"):  # e to end
+                    if self.trajectory:
+                        self.trajectory.Write_Bounce_Location()
+                        # output bouncing analyze img
+                        self.trajectory.Draw_Bounce_Analysis()
+                        self.trajectory.Save_Bounce_Analysis()
+                        # For saving bounce map.
+                        self.trajectory.Save_Bounce_Location()
+                        # For saving bounce map.
+                        self.trajectory.Save_Bounce_Location()
+                        # For saving speedHist
+                        self.trajectory.Draw_SpeedHist()
+                        del self.trajectory
+                        self.trajectory = None
+            if not self.trajectory:
+                if key == ord("q"):
+                    self.cap.release()
+                    cv2.destroyAllWindows()
+                    raise StopIteration
+                if key == ord("s"):  # s to start
                     self.trajectory_init(img0)  # 落點
 
         if self.model_choices == "yolo":
