@@ -22,6 +22,7 @@
 *.cfg
 !setup.cfg
 !cfg/yolov3*.cfg
+!AI-Powered-Table-Tennis-Scoring-System-with-Ball-Launcher/*.png
 
 storage.googleapis.com
 runs/*
