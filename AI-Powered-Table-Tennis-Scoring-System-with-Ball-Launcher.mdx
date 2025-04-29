@@ -242,10 +242,29 @@ For each detection, the system calculates the following features in comparison t
 
 The **normalized scores** for each feature are defined as:
 
-- **IoU score**: $S_{\text{iou}} = \text{IoU}$
-- **Direction score** (cosine similarity bounded in $[-1, 1]$): $S_{\text{dir}} = \cos(\theta) = \frac{\vec{v}_{\text{avg}} \cdot \vec{v}_{\text{new}}}{\| \vec{v}_{\text{avg}} \| \cdot \| \vec{v}_{\text{new}} \|}$
-- **Distance score** (normalized and reversed): $S_{\text{dis}} = 1 - \min\left( \frac{d}{d_{\text{max}}}, 1 \right)$
-- **Aspect Ratio score**: $S_{\text{ar}} = 1 - \min\left( \frac{|\frac{w}{h} - \frac{w'}{h'}|}{\Delta_{\text{max}}}, 1 \right)$
+- **IoU score**:
+
+$$
+S_{\text{iou}} = \text{IoU}
+$$
+
+- **Direction score** (cosine similarity bounded in $[-1, 1]$):
+
+$$
+S_{\text{dir}} = \cos(\theta) = \frac{v_{\text{avg}} \cdot v_{\text{new}}}{| v_{\text{avg}} | \cdot | v_{\text{new}} |}
+$$
+
+- **Distance score** (normalized and reversed):
+
+$$
+S_{\text{dis}} = 1 - \min\left( \frac{d}{d_{\text{max}}}, 1 \right)
+$$
+
+- **Aspect Ratio score**:
+
+$$
+S_{\text{ar}} = 1 - \min\left( \frac{|\frac{w}{h} - \frac{w'}{h'}|}{\Delta_{\text{max}}}, 1 \right)
+$$
 
 ### **Adaptive Weighting Mechanism**
 
