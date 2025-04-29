@@ -8,8 +8,6 @@ You can view or download the full paper here:
 
 👉 [Download AI-Scoring-System.pdf](./AI-Powered-Table-Tennis-Scoring-System-with-Ball-Launcher/AI-Scoring-System.pdf)
 
----
-
 ## Abstract
 
 This paper proposes a **vision-based tracking system** for analyzing **table tennis ball trajectories** and **classifying landing points**, leveraging the capabilities of the **YOLOv7 object detection framework**.
@@ -22,8 +20,6 @@ To accurately determine the landing position on the table surface, the system ap
 Based on the identified landing location, each shot is categorized into one of the following classes: **valid hit**, **incorrect landing**, **out-of-bounds**, or **missed shot**.
 By integrating YOLOv7, which offers both **high detection speed** and **precision**, the system significantly improves the **real-time performance** and **accuracy** of trajectory analysis.
 Furthermore, the combination of **parabolic motion modeling** and **perspective correction** contributes to more **reliable landing point localization** and **robust shot classification**.
-
----
 
 ## Introduction
 
@@ -38,8 +34,6 @@ To address this, we adopt **YOLOv7** [1], a real-time object detection algorithm
 Combined with **trajectory analysis** and **perspective transformation**, our system can accurately classify landing results and provide detailed motion data.
 
 This enables **automatic evaluation** of shots and supports training optimization, enhancing the functionality of **automated ball-serving machines**.
-
----
 
 ## Methodology
 
@@ -66,8 +60,6 @@ This pipeline ensures that the system can provide **accurate landing point local
 | ![Figure_1](./AI-Powered-Table-Tennis-Scoring-System-with-Ball-Launcher/Figure_1.png) |
 | :-----------------------------------------------------------------------------------: |
 |                                     **Figure 1**                                      |
-
----
 
 ## Object Detection Model
 
@@ -96,8 +88,6 @@ Given the **fast motion** and **frequent direction changes** of the ball in tabl
 | ![Figure_3](./AI-Powered-Table-Tennis-Scoring-System-with-Ball-Launcher/Figure_3.png) |
 | :-----------------------------------------------------------------------------------: |
 |           **Figure 3.** Architecture of the YOLOv7 object detection model.            |
-
----
 
 ### Activation Function
 
@@ -144,8 +134,6 @@ $$
 
 SiLU combines the input with its sigmoid activation, allowing the function to behave linearly for large positive inputs while smoothly approaching zero for negative inputs. Compared to ReLU and Leaky ReLU, SiLU offers a **smoother curve**, **continuous output**, and **better gradient stability**, which improves convergence during training and enhances the model’s ability to learn **complex visual features**.
 
----
-
 ### Bounding Box Loss Function
 
 During the training of deep convolutional neural networks, the model learns to minimize a **loss function** in order to reduce prediction error and improve accuracy.
@@ -184,8 +172,6 @@ Here, $w^{\text{gt}}, h^{\text{gt}}$ and $w^{\text{pred}}, h^{\text{pred}}$ refe
 In this study, **CIoU is adopted as the bounding box loss function** to guide the object detection model.
 By accounting for both spatial alignment and shape similarity, CIoU enables the model to learn more precise bounding box placements, significantly reducing localization errors and improving overall detection performance.
 
----
-
 ### Multi-Scale Feature Fusion Framework
 
 The combination of the **Feature Pyramid Network (FPN)** and **Path Aggregation Network (PAN)** forms an efficient framework for **multi-scale feature extraction and fusion**, significantly enhancing YOLOv7’s capability to detect objects of various sizes and shapes.
@@ -206,8 +192,6 @@ This architectural refinement enhances the network's robustness when detecting o
 | :-----------------------------------------------------------------------------------: |
 |           **Figure 7.** Architecture of the Feature Pyramid Network (FPN).            |
 
----
-
 ### SPPCSPC Network
 
 The **SPPCSPC network** integrates the advantages of **Spatial Pyramid Pooling (SPP)** [9] and the **Cross Stage Partial Network (CSPNet)** [10] to enhance feature extraction capabilities and expand the **receptive field** of the model.
@@ -227,8 +211,6 @@ This architecture **expands the receptive field**, improves robustness, and enha
 | :-----------------------------------------------------------------------------------: |
 |                  **Figure 8.** Architecture of the SPPCSPC network.                   |
 
----
-
 ### Efficient Layer Aggregation Network
 
 The **Efficient Layer Aggregation Network (ELAN)**, proposed by Wang et al. [11], serves as the **backbone** in object detection networks, designed for efficient and scalable feature extraction.
@@ -244,14 +226,10 @@ This enables the network to make better use of **multi-level representations**, 
 | :-----------------------------------------------------------------------------------: |
 |     **Figure 9.** Architecture of the Efficient Layer Aggregation Network (ELAN).     |
 
----
-
 ## **Trajectory Management Mechanism**
 
 To robustly track fast-moving table tennis balls across frames, this study introduces a **trajectory management mechanism** that performs dynamic ball-to-track association based on a weighted evaluation of multiple features.
 The system computes a **matching score** between each detected bounding box and existing tracked objects to determine whether to update an existing trajectory or initialize a new one, as illustrated in **Figure 10**.
-
----
 
 ### **Feature Extraction and Similarity Scoring**
 
@@ -281,8 +259,6 @@ The **normalized scores** for each feature are defined as:
   S_{\text{ar}} = 1 - \min\left( \frac{|\frac{w}{h} - \frac{w'}{h'}|}{\Delta_{\text{max}}}, 1 \right)
   $$
 
----
-
 ### **Adaptive Weighting Mechanism**
 
 To improve adaptability across scenes and object positions, this study introduces a **context-aware weighting strategy**.
@@ -297,15 +273,11 @@ $$
 \text{Score} = w_{\text{iou}} \cdot S_{\text{iou}} + w_{\text{dir}} \cdot S_{\text{dir}} + w_{\text{dis}} \cdot S_{\text{dis}} + w_{\text{ar}} \cdot S_{\text{ar}}
 $$
 
----
-
 ### **Assignment Decision**
 
 Each detection is compared against all existing tracked balls.
 Pairs are ranked by score and greedily assigned, ensuring each detection and trajectory is matched at most once.
 If a score exceeds a predefined **association threshold**, the detection updates the matched trajectory; otherwise, a **new trajectory** is initialized.
-
----
 
 ### **Benefits**
 
@@ -318,8 +290,6 @@ This mechanism allows:
 |                 ![Figure_10](./AI-Powered-Table-Tennis-Scoring-System-with-Ball-Launcher/Figure_10.png)                 |
 | :---------------------------------------------------------------------------------------------------------------------: |
 | **Figure 10.** Flowchart of the trajectory association mechanism based on multi-feature scoring and adaptive weighting. |
-
----
 
 ## Bounce Detection Method
 
@@ -336,8 +306,6 @@ To avoid false positives from paddle swings or noise, only detections with **con
 The full algorithm, including [**parabolic equation fitting**](Table-Tennis-Trajectory-Landing-Point-and-Speed-Analysis-System#parabolic-equation-calculation) and [**bounce coordinate estimation**](Table-Tennis-Trajectory-Landing-Point-and-Speed-Analysis-System#bounce-coordinate-calculation), follows the approach detailed in a related work:
 [**"Table Tennis Trajectory Landing Point and Speed Analysis System"**](Table-Tennis-Trajectory-Landing-Point-and-Speed-Analysis-System), which can be referenced for the complete mathematical formulation and detection logic.
 
----
-
 ## Experimental Results
 
 In this study, we conducted experiments using video footage recorded in the **Smart Table Tennis Classroom at National Chung Hsing University**, capturing the launching process of an automatic ball-serving machine.
@@ -347,8 +315,6 @@ The resulting dataset covers a variety of ball trajectory scenarios. The propose
 |          ![Figure_11](./AI-Powered-Table-Tennis-Scoring-System-with-Ball-Launcher/Figure_11.png)          |
 | :-------------------------------------------------------------------------------------------------------: |
 | **Figure 11.** Experimental setup in the Smart Table Tennis Classroom at National Chung Hsing University. |
-
----
 
 ### Runtime Evaluation
 
@@ -366,8 +332,6 @@ The full process took **39 seconds**, completing the tracking and classification
 | Video Length | YOLO FPS | Ball Trajectory Tracking | Total Processing Time |
 | :----------: | :------: | :----------------------: | :-------------------: |
 | 1 min 31 sec | 58.1 FPS |          39 sec          |        39 sec         |
-
----
 
 ### Result Visualization
 
