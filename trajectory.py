@@ -2,11 +2,13 @@ import argparse
 import datetime
 import json
 import math
+import multiprocessing as mp
 import os
 import queue
 import re
 import sys
 import time
+from collections import defaultdict
 from pathlib import Path
 
 import cv2
@@ -105,16 +107,35 @@ class Trajectory:
                     half_strictly_decreasing = False
             else:
                 half_strictly_decreasing = False
-            return half_strictly_increasing or half_strictly_decreasing
+
+            # 回傳結果
+            if half_strictly_increasing:
+                return "right"
+            elif half_strictly_decreasing:
+                return "left"
+            else:
+                return "unknown"
         else:
             if strictly:
                 strictly_increasing = np.all(L[1:] > L[:-1])
                 strictly_decreasing = np.all(L[1:] < L[:-1])
-                return strictly_increasing or strictly_decreasing
+                # 回傳結果
+                if strictly_increasing:
+                    return "right"
+                elif strictly_decreasing:
+                    return "left"
+                else:
+                    return "unknown"
             else:
-                non_increasing = np.all(L[1:] >= L[:-1])
-                non_decreasing = np.all(L[1:] <= L[:-1])
-                return non_increasing or non_decreasing
+                non_strictly_increasing = np.all(L[1:] >= L[:-1])
+                non_strictly_decreasing = np.all(L[1:] <= L[:-1])
+                # 回傳結果
+                if non_strictly_increasing:
+                    return "right"
+                elif non_strictly_decreasing:
+                    return "left"
+                else:
+                    return "unknown"
 
     def Euclidean_Distance(self, x, y, x1, y1):
         # 計算歐式距離
@@ -303,7 +324,7 @@ class Trajectory:
         plt.xticks(fontsize=20)
         plt.yticks(fontsize=20)
         plt.xlabel(f"shots", fontsize=30, labelpad=15)
-        plt.ylabel(f"Km/hr", fontsize=30, labelpad=20)
+        plt.ylabel(f"m/s", fontsize=30, labelpad=20)
         plt.legend(loc="best", fontsize=20)
         if save:
             plt.savefig(os.path.join(self.speedhis_path, f"{self.video_name}_shot_speedhis.png"))
@@ -317,7 +338,7 @@ class Trajectory:
         plt.figure(figsize=(15, 10), dpi=100, linewidth=2)
         plt.hist([self.left_speed_list, self.right_speed_list], bins="auto", alpha=1, label=["left", "right"])
 
-        plt.xlabel(f"Km/hr", fontsize=30, labelpad=15)
+        plt.xlabel(f"m/s", fontsize=30, labelpad=15)
         plt.ylabel(f"shots", fontsize=30, labelpad=20)
         plt.legend(loc="upper right")
         if save:
@@ -527,28 +548,22 @@ class Trajectory:
 
         return output
 
-    def Load_Mark_Point(self, csv_path, PT_data):
+    def Load_Mark_Point(self, csv_path, PT_data, size):
         df = pd.read_csv(csv_path)
         if not df.empty:
             row = df.iloc[0]  # 取第一行數據
-            PT_data["point_x"] = [row[f"point_x{i}"] for i in range(1, 5)]
-            PT_data["point_y"] = [row[f"point_y{i}"] for i in range(1, 5)]
+            PT_data["point_x"] = [row[f"point_x{i}"] for i in range(1, size + 1)]
+            PT_data["point_y"] = [row[f"point_y{i}"] for i in range(1, size + 1)]
             return True
         else:
             return False
 
-    def Save_Mark_Point(self, csv_path, PT_data):
+    def Save_Mark_Point(self, csv_path, PT_data, size):
         df = pd.read_csv(csv_path)
-        new_row = {
-            "point_x1": PT_data["point_x"][0],
-            "point_x2": PT_data["point_x"][1],
-            "point_x3": PT_data["point_x"][2],
-            "point_x4": PT_data["point_x"][3],
-            "point_y1": PT_data["point_y"][0],
-            "point_y2": PT_data["point_y"][1],
-            "point_y3": PT_data["point_y"][2],
-            "point_y4": PT_data["point_y"][3],
-        }
+        new_row = {}
+        for i in range(size):
+            new_row[f"point_x{i+1}"] = PT_data["point_x"][i]
+            new_row[f"point_y{i+1}"] = PT_data["point_y"][i]
         df = pd.DataFrame([new_row])
         df.to_csv(csv_path, index=False)
 
@@ -556,7 +571,7 @@ class Trajectory:
         # 點選透視變形位置, 順序為:左上,左下,右下,右上
         PT_data = {"img": image.copy(), "point_x": [], "point_y": []}
         table_csv_path = r"niag/focus_bbox.csv"
-        if not self.Load_Mark_Point(table_csv_path, PT_data):
+        if not self.Load_Mark_Point(table_csv_path, PT_data, 4):
             cv2.namedWindow("PIC2 (press Q to quit)", 0)
             cv2.resizeWindow("PIC2 (press Q to quit)", frame_width, frame_height)
             cv2.setMouseCallback("PIC2 (press Q to quit)", self.Draw_Circle, PT_data)
@@ -566,7 +581,7 @@ class Trajectory:
                     print(PT_data)
                     cv2.destroyWindow("PIC2 (press Q to quit)")
                     break
-            self.Save_Mark_Point(table_csv_path, PT_data)
+            self.Save_Mark_Point(table_csv_path, PT_data, 4)
 
         # PerspectiveTransform
         upper_left = [PT_data["point_x"][0], PT_data["point_y"][0]]
@@ -590,6 +605,33 @@ class Trajectory:
         self.img_opt_bounce_location = self.Draw_MiniBoard("bounce")
         self.bounce_analyze_img = self.Draw_MiniBoard("bounce")
 
+        # ----------------------------------------------------------------------------------------
+
+        if self.is_real_time_speed:
+            # 點選透視變形位置, 順序為:左上,左下,右下,右上
+            PT_data = {"img": image.copy(), "point_x": [], "point_y": []}
+            table_csv_path = r"niag/table_width.csv"
+            if not self.Load_Mark_Point(table_csv_path, PT_data, 2):
+                cv2.namedWindow("table_width (press Q to quit)", 0)
+                cv2.resizeWindow("table_width (press Q to quit)", frame_width, frame_height)
+                cv2.setMouseCallback("table_width (press Q to quit)", self.Draw_Circle, PT_data)
+                while True:
+                    cv2.imshow("table_width (press Q to quit)", PT_data["img"])
+                    if cv2.waitKey(2) == ord("q"):
+                        print(PT_data)
+                        cv2.destroyWindow("table_width (press Q to quit)")
+                        break
+                self.Save_Mark_Point(table_csv_path, PT_data, 2)
+
+            # PerspectiveTransform
+            table_left = [PT_data["point_x"][0], PT_data["point_y"][0]]
+            table_right = [PT_data["point_x"][1], PT_data["point_y"][1]]
+            dx = table_right[0] - table_left[0]
+            dy = table_right[1] - table_left[1]
+            self.table_pixel_length = math.hypot(dx, dy)
+            # 計算每 pixel 對應的實際距離（m/pixel）
+            self.m_per_pixel = (self.real_table_width_cm / 100) / self.table_pixel_length
+
         # 顯示
         if self.is_show_bounce_analysis:
             self.Draw_Bounce_Analysis()
@@ -597,10 +639,90 @@ class Trajectory:
         if self.is_show_bounce_location:
             self.Show_Bounce_Location()
 
+    def Estimate_Ball_Speed_kmh(self):
+        if self.x_c_pred == None or self.past_x_c_pred == None or self.y_c_pred == None or self.past_y_c_pred == None:
+            return None
+        delta_x_c_pred = self.x_c_pred - self.past_x_c_pred
+        delta_y_c_pred = self.y_c_pred - self.past_y_c_pred
+        # 計算球的 pixel 移動總長度
+        delta_pixel = math.hypot(delta_x_c_pred, delta_y_c_pred)
+        # 轉換為真實距離（單位：m）
+        delta_m = delta_pixel * self.m_per_pixel
+
+        frame_diff = self.count - self.past_c_frame_number + 1
+        # 計算速度：m/frame → m/s
+        return delta_m * self.framerate / frame_diff
+
+    def Generate_Real_Time_Speed_index(self):
+        if self.real_time_past_ball_direction == "unknown" and self.real_time_ball_direction == "right":
+            return
+        if self.real_time_past_ball_direction == "unknown" and self.real_time_ball_direction == "left":
+            return
+        if self.real_time_ball_direction != self.real_time_past_ball_direction:
+            self.last_frame_switch_ball_direction = self.count
+            self.real_time_speed_index_last += 1
+        return self.real_time_speed_index_last
+
+    def Control_Queue(self, tag, index, image_CV):
+        if tag != "frame" and tag != "save" and tag != "exit":
+            raise Exception("unknow tag")
+        self.control_queue.put((tag, index, image_CV))
+
+    def Raise_Save_Queue(self):
+        for index in range(self.real_time_speed_index_head, self.real_time_speed_index_last + 1):
+            self.Control_Queue("save", index, None)
+        self.real_time_speed_index_last = self.real_time_speed_index_last + 1
+        self.real_time_speed_index_head = self.real_time_speed_index_last
+
+    def Is_Save_Queue(self):
+        if self.count - self.last_frame_switch_ball_direction > self.save_queue_threadhold_by_switch_ball_direction:
+            return True
+        else:
+            return False
+
+    def Exit_Save_Queue(self):
+        self.Raise_Save_Queue()
+        for index in range(self.real_time_speed_index_head, self.real_time_speed_index_last + 1):
+            self.Control_Queue("exit", index, None)
+        self.real_time_speed_process.join()
+
+    def Real_Time_Speed_Process(self, control_queue, save_queue_minimum_frame_size):
+        buffers = defaultdict(list)
+        save_triggered = set()
+        while True:
+            if not control_queue.empty():
+                cmd, tag, frame = control_queue.get()
+                if cmd == "frame":
+                    if tag not in save_triggered:
+                        buffers[tag].append(frame)
+                elif cmd == "save":
+                    if tag in buffers and buffers[tag]:
+                        frames = buffers[tag]
+                        if save_queue_minimum_frame_size < len(frames):
+                            height, width, _ = frames[0].shape
+                            out = cv2.VideoWriter(
+                                f"video_{tag:03d}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 10, (width, height)
+                            )
+                            for f in frames:
+                                out.write(f)
+                            out.release()
+                            print(f"影片 video_{tag:03d}.mp4 儲存完成")
+                        save_triggered.add(tag)  # 標記為已儲存
+                        buffers[tag].clear()
+                elif cmd == "exit":
+                    break
+            time.sleep(0.01)
+
     def Read_Yolo_Label_One_Frame(self, label_file=None, balls=None, x_c_pred=None, y_c_pred=None):
         if x_c_pred != None and y_c_pred != None:
+            self.past_c_frame_number = self.count
+            self.past_x_c_pred, self.past_y_c_pred = self.x_c_pred, self.y_c_pred
             self.x_c_pred, self.y_c_pred = x_c_pred, y_c_pred
             return
+
+        if self.x_c_pred != None and self.y_c_pred != None:
+            self.past_c_frame_number = self.count
+            self.past_x_c_pred, self.past_y_c_pred = self.x_c_pred, self.y_c_pred
 
         if balls == None:
             balls = []
@@ -613,17 +735,26 @@ class Trajectory:
                         if int(l[0]) == 0:
                             balls.append(l)
 
+        if len(balls) == 0:
+            self.x_c_pred, self.y_c_pred = None, None
+            self.x_ltop_pred, self.y_ltop_pred = None, None
+            return
+
         # 找尋最接近上次的球
         distance = sys.float_info.max
         for ball in balls:
-            ball_x_c_pred, ball_y_c_pred = int(float(ball[1]) * self.frame_width), int(
-                float(ball[2]) * self.frame_height
-            )
-            if self.x_c_pred == np.inf or self.y_c_pred == np.inf:
-                self.x_c_pred, self.y_c_pred = ball_x_c_pred, ball_y_c_pred
-            elif distance > math.sqrt((ball_x_c_pred - self.x_c_pred) ** 2 + (ball_y_c_pred - self.y_c_pred) ** 2):
-                distance = math.sqrt((ball_x_c_pred - self.x_c_pred) ** 2 + (ball_y_c_pred - self.y_c_pred) ** 2)
-                self.x_c_pred, self.y_c_pred = ball_x_c_pred, ball_y_c_pred
+            ball_x = int(float(ball[1]) * self.frame_width)
+            ball_y = int(float(ball[2]) * self.frame_height)
+            ball_w = float(ball[3]) * self.frame_width
+            ball_h = float(ball[4]) * self.frame_height
+
+            if self.x_c_pred == None or self.y_c_pred == None:
+                self.x_c_pred, self.y_c_pred = ball_x, ball_y
+                self.x_ltop_pred, self.y_ltop_pred = int(ball_x - ball_w / 2), int(ball_y - ball_h / 2)
+            elif distance > math.sqrt((ball_x - self.x_c_pred) ** 2 + (ball_y - self.y_c_pred) ** 2):
+                distance = math.sqrt((ball_x - self.x_c_pred) ** 2 + (ball_y - self.y_c_pred) ** 2)
+                self.x_c_pred, self.y_c_pred = ball_x, ball_y
+                self.x_ltop_pred, self.y_ltop_pred = int(ball_x - ball_w / 2), int(ball_y - ball_h / 2)
 
     def parse_args(self):
         parser = argparse.ArgumentParser(description="Predict")
@@ -635,232 +766,236 @@ class Trajectory:
         # 針對每一貞做運算
         image_CV = image.copy()
 
+        # 計算順時速度
+        if self.is_real_time_speed:
+            self.real_time_speed = self.Estimate_Ball_Speed_kmh()
+
+        # 計算方向
+        balls = 5 if self.is_first_ball else 9
+        q_array = np.array(self.q)
+        non_negatives_idx = np.where(np.all(q_array != (-1, -1), axis=1))[0][:balls]
+        q_array = q_array[non_negatives_idx]
+        if q_array.size == 0:
+            x_tmp = np.array([])
+            y_tmp = np.array([])
+        else:
+            x_tmp = q_array[:, 0]
+            y_tmp = q_array[:, 1]
+
+        # 累積有三顆球的軌跡且同一方向, 可計算拋物線
+        if self.is_real_time_speed:
+            self.real_time_past_ball_direction = self.real_time_ball_direction
+        self.ball_direction, self.real_time_ball_direction = "unknown", "unknown"
+        if len(x_tmp) >= 3:
+            # 檢查是否嚴格遞增或嚴格遞減,(軌跡方向是否相同) x_tmp是左邊新右邊舊，所以要相反
+            self.ball_direction = self.Monotonic(x_tmp[::-1], strictly=False, half=False)
+            if self.is_real_time_speed:
+                self.real_time_ball_direction = self.Monotonic(x_tmp[:3][::-1], strictly=False, half=False)
+
         ## 有偵測到球體
-        if self.x_c_pred != np.inf and self.y_c_pred != np.inf:
-            balls = 5 if self.is_first_ball else 9
-            q_array = np.array(self.q)
-            non_negatives_idx = np.where(np.all(q_array != (-1, -1), axis=1))[0][:balls]
-            q_array = q_array[non_negatives_idx]
-            if q_array.size == 0:
-                x_tmp = np.array([])
-                y_tmp = np.array([])
-            else:
-                x_tmp = q_array[:, 0]
-                y_tmp = q_array[:, 1]
-            # x_tmp = [self.q[j][0] for j in range(balls) if self.q[j] is not None]
-            # y_tmp = [self.q[j][1] for j in range(balls) if self.q[j] is not None]
+        if self.x_c_pred != None and self.y_c_pred != None:
             ## 落點預測 ######################################################################################################
-            if len(x_tmp) >= 3:
-                # 檢查是否嚴格遞增或嚴格遞減,(軌跡方向是否相同)
-                isSameWay = self.Monotonic(x_tmp, strictly=False, half=False)
-                # 累積有三顆球的軌跡且同一方向, 可計算拋物線
-                if isSameWay:
-                    parabola = self.Solve_Parabola(x_tmp, y_tmp)
-                    a, b, c = parabola[0]
-                    fit = a * self.x_c_pred**2 + b * self.x_c_pred + c
-                    # cv2.circle(image_CV, (self.x_c_pred, int(fit)), 5, (255, 0, 0), 4)
-                    # 差距 10 個 pixel 以上視為脫離預測的拋物線
-                    if abs(self.y_c_pred - fit) >= 10:
-                        x_last = x_tmp[0]
-                        # 預測球在球桌上的落點, x_drop : 本次與前次的中點, y_drop : x_drop 於拋物線上的位置
-                        x_drop = int(round((self.x_c_pred + x_last) / 2, 0))
-                        y_drop = int(round(a * x_drop**2 + b * x_drop + c, 0))
-                        # 繪製本次球體位置, Golden
-                        cv2.circle(image_CV, (self.x_c_pred, self.y_c_pred), 5, (0, 215, 255), 4)
-                        # 透視變形計算本次球體在迷你板上的位置
-                        loc_PT = self.Perspective_Transform(self.matrix, (x_drop, y_drop))
-                        # 如果變換後落在迷你板內
-                        if (
-                            loc_PT[0] >= self.miniboard_edge - 1
-                            and loc_PT[0] < self.miniboard_width + self.miniboard_edge + 5
-                            and loc_PT[1] >= self.miniboard_edge - 5
-                            and loc_PT[1] < self.miniboard_height + self.miniboard_edge + 5
-                        ):
-                            self.PT_dict[self.count] = loc_PT
-                            restart_list = list(self.PT_dict.keys())
-                            """
-                            一局結束判斷
-                            1. 倒數兩球距離過大 (飛出界)
-                            2. 停留在桌上 (被網子攔住)
-                            """
-                            if len(restart_list) >= 2 and (int(restart_list[-1]) - int(restart_list[-2])) > 200:
-                                self.is_serve_wait = False
-                                self.bounce_frame_L, self.bounce_frame_R = -1, -1
-                                self.hit_count = 0
-                                print(f"<---Frame : {self.count}, round end.--->")
+            if self.ball_direction == "right" or self.ball_direction == "left":
+                parabola = self.Solve_Parabola(x_tmp, y_tmp)
+                a, b, c = parabola[0]
+                fit = a * self.x_c_pred**2 + b * self.x_c_pred + c
+                # cv2.circle(image_CV, (self.x_c_pred, int(fit)), 5, (255, 0, 0), 4)
+                # 差距 10 個 pixel 以上視為脫離預測的拋物線
+                if abs(self.y_c_pred - fit) >= 10:
+                    x_last = x_tmp[0]
+                    # 預測球在球桌上的落點, x_drop : 本次與前次的中點, y_drop : x_drop 於拋物線上的位置
+                    x_drop = int(round((self.x_c_pred + x_last) / 2, 0))
+                    y_drop = int(round(a * x_drop**2 + b * x_drop + c, 0))
+                    # 繪製本次球體位置, Golden
+                    cv2.circle(image_CV, (self.x_c_pred, self.y_c_pred), 5, (0, 215, 255), 4)
+                    # 透視變形計算本次球體在迷你板上的位置
+                    loc_PT = self.Perspective_Transform(self.matrix, (x_drop, y_drop))
+                    # 如果變換後落在迷你板內
+                    if (
+                        loc_PT[0] >= self.miniboard_edge - 1
+                        and loc_PT[0] < self.miniboard_width + self.miniboard_edge + 5
+                        and loc_PT[1] >= self.miniboard_edge - 5
+                        and loc_PT[1] < self.miniboard_height + self.miniboard_edge + 5
+                    ):
+                        self.PT_dict[self.count] = loc_PT
+                        restart_list = list(self.PT_dict.keys())
+                        """
+                        一局結束判斷
+                        1. 倒數兩球距離過大 (飛出界)
+                        2. 停留在桌上 (被網子攔住)
+                        """
+                        if len(restart_list) >= 2 and (int(restart_list[-1]) - int(restart_list[-2])) > 200:
+                            self.is_serve_wait = False
+                            self.bounce_frame_L, self.bounce_frame_R = -1, -1
+                            self.hit_count = 0
+                            print(f"<---Frame : {self.count}, round end.--->")
+                            self.img_opt = self.Draw_MiniBoard()
+                        # 落點在左側
+                        if self.PT_dict[self.count][0] <= int(self.miniboard_width / 2) + self.miniboard_edge:
+                            # 首次發球 或 二次發球
+                            if not self.is_serve_wait:
+                                self.is_first_ball = True
+                                self.is_serve_wait = True
+                                self.hit_count = 1
+                                self.now_player = 1  # switch player
+                                self.bounce_frame_L = self.count
                                 self.img_opt = self.Draw_MiniBoard()
-                            # 落點在左側
-                            if self.PT_dict[self.count][0] <= int(self.miniboard_width / 2) + self.miniboard_edge:
-                                # 首次發球 或 二次發球
-                                if not self.is_serve_wait:
-                                    self.is_first_ball = True
-                                    self.is_serve_wait = True
-                                    self.hit_count = 1
-                                    self.now_player = 1  # switch player
-                                    self.bounce_frame_L = self.count
-                                    self.img_opt = self.Draw_MiniBoard()
-                                    self.Draw_and_Collect_Data(
-                                        (0, 0, 255),
-                                        loc_PT,
-                                    )
+                                self.Draw_and_Collect_Data(
+                                    (0, 0, 255),
+                                    loc_PT,
+                                )
 
-                                # 回擊
-                                elif self.now_player == 0 and self.is_serve_wait:
-                                    if self.hit_count > 0:
-                                        # cv2.line(
-                                        #     self.img_opt,
-                                        #     self.PT_dict[self.bounce_frame_R],
-                                        #     self.PT_dict[self.count],
-                                        #     (0, 255, 0),
-                                        #     3,
-                                        # )
-                                        # 在miniboard上面兩顆球的距離 D2，單位是pixel
-                                        bounce_len = self.Euclidean_Distance(
-                                            self.PT_dict[self.bounce_frame_R][0],
-                                            self.PT_dict[self.bounce_frame_R][1],
-                                            self.PT_dict[self.count][0],
-                                            self.PT_dict[self.count][1],
+                            # 回擊
+                            elif self.now_player == 0 and self.is_serve_wait:
+                                if self.hit_count > 0:
+                                    # cv2.line(
+                                    #     self.img_opt,
+                                    #     self.PT_dict[self.bounce_frame_R],
+                                    #     self.PT_dict[self.count],
+                                    #     (0, 255, 0),
+                                    #     3,
+                                    # )
+                                    # 在miniboard上面兩顆球的距離 D2，單位是pixel
+                                    bounce_len = self.Euclidean_Distance(
+                                        self.PT_dict[self.bounce_frame_R][0],
+                                        self.PT_dict[self.bounce_frame_R][1],
+                                        self.PT_dict[self.count][0],
+                                        self.PT_dict[self.count][1],
+                                    )
+                                    # D1的距離，單位是CM
+                                    speed_bounce_distance_right = abs(
+                                        self.shotspeed_previous
+                                        * (100 / 1)
+                                        * (self.right_shot_count - self.bounce_frame_R)
+                                        / self.framerate
+                                    )
+                                    # miniboard轉成真實CM距離，加上上一球推測的距離，除以時間
+                                    self.speed_right = np.round(
+                                        (
+                                            (bounce_len * (self.miniboard_to_real_ratio) + speed_bounce_distance_right)
+                                            / (self.count - self.right_shot_count)
                                         )
-                                        # D1的距離，單位是CM
-                                        speed_bounce_distance_right = abs(
-                                            self.shotspeed_previous
-                                            * (100000 / 3600)
-                                            * (self.right_shot_count - self.bounce_frame_R)
-                                            / self.framerate
-                                        )
-                                        # miniboard轉成真實CM距離，加上上一球推測的距離，除以時間
-                                        self.speed_right = np.round(
-                                            (
-                                                (
-                                                    bounce_len * (self.miniboard_to_real_ratio)
-                                                    + speed_bounce_distance_right
-                                                )
-                                                / (self.count - self.right_shot_count)
-                                            )
-                                            * self.framerate
-                                            * (3600 / 100000),
-                                            1,
-                                        )
-                                        if self.speed_right > 100:
-                                            self.speed_right = 99
+                                        * self.framerate
+                                        * (1 / 100),
+                                        1,
+                                    )
+                                    if self.speed_right > 100:
+                                        self.speed_right = 99
 
-                                        self.shotspeed = self.speed_right
-                                        self.shotspeed_previous = self.speed_right
-                                        print(f"Frame : {self.count} self.speed_right : {self.speed_right} ")
-                                        self.right_speed_list.append(self.speed_right)
-                                        if self.is_show_speed_analysis:
-                                            self.Draw_SpeedHist(save=False, show=self.is_show_speed_analysis)
-                                    self.is_first_ball = False
-                                    self.hit_count += 1
-                                    self.now_player = 1
-                                    self.bounce_frame_L = self.count
-                                    self.Draw_and_Collect_Data(
-                                        (0, 0, 255),
-                                        loc_PT,
-                                    )
-                                # 其他
-                                elif (self.count - self.bounce_frame_L) > 60:
-                                    print("[------------------------------------------------------------]")
-                                    print(
-                                        f"sth wrong at frame : {self.count}, bounce_R : {self.bounce_frame_R}, self.hit_count : {self.hit_count}"
-                                    )
-                                    print("[------------------------------------------------------------]")
-                                    self.is_first_ball = False
-                                    self.is_serve_wait = True
-                                    self.now_player = 1
-                                    self.bounce_frame_L = self.count
-                                    self.hit_count = 1
-                                    self.img_opt = self.Draw_MiniBoard()
-                                    self.Draw_and_Collect_Data(
-                                        (0, 0, 255),
-                                        loc_PT,
-                                    )
+                                    self.shotspeed = self.speed_right
+                                    self.shotspeed_previous = self.speed_right
+                                    print(f"Frame : {self.count} self.speed_right : {self.speed_right} ")
+                                    self.right_speed_list.append(self.speed_right)
+                                    if self.is_show_speed_analysis:
+                                        self.Draw_SpeedHist(save=False, show=self.is_show_speed_analysis)
+                                self.is_first_ball = False
+                                self.hit_count += 1
+                                self.now_player = 1
+                                self.bounce_frame_L = self.count
+                                self.Draw_and_Collect_Data(
+                                    (0, 0, 255),
+                                    loc_PT,
+                                )
+                            # 其他
+                            elif (self.count - self.bounce_frame_L) > 60:
+                                print("[------------------------------------------------------------]")
+                                print(
+                                    f"sth wrong at frame : {self.count}, bounce_R : {self.bounce_frame_R}, self.hit_count : {self.hit_count}"
+                                )
+                                print("[------------------------------------------------------------]")
+                                self.is_first_ball = False
+                                self.is_serve_wait = True
+                                self.now_player = 1
+                                self.bounce_frame_L = self.count
+                                self.hit_count = 1
+                                self.img_opt = self.Draw_MiniBoard()
+                                self.Draw_and_Collect_Data(
+                                    (0, 0, 255),
+                                    loc_PT,
+                                )
 
-                            # 落點在右側
-                            elif self.PT_dict[self.count][0] >= int(self.miniboard_width / 2) + self.miniboard_edge:
-                                # 首次發球 或 二次發球
-                                if not self.is_serve_wait:
-                                    self.is_first_ball = True
-                                    self.is_serve_wait = True
-                                    self.hit_count = 1
-                                    self.now_player = 0  # switch player
-                                    self.bounce_frame_R = self.count
-                                    self.img_opt = self.Draw_MiniBoard()
-                                    self.Draw_and_Collect_Data(
-                                        (80, 127, 255),
-                                        loc_PT,
-                                    )
+                        # 落點在右側
+                        elif self.PT_dict[self.count][0] >= int(self.miniboard_width / 2) + self.miniboard_edge:
+                            # 首次發球 或 二次發球
+                            if not self.is_serve_wait:
+                                self.is_first_ball = True
+                                self.is_serve_wait = True
+                                self.hit_count = 1
+                                self.now_player = 0  # switch player
+                                self.bounce_frame_R = self.count
+                                self.img_opt = self.Draw_MiniBoard()
+                                self.Draw_and_Collect_Data(
+                                    (80, 127, 255),
+                                    loc_PT,
+                                )
 
-                                # 回擊
-                                elif self.now_player == 1 and self.is_serve_wait:
-                                    if self.hit_count > 0:
-                                        # like yellow
-                                        # cv2.line(
-                                        #     self.img_opt,
-                                        #     self.PT_dict[self.bounce_frame_L],
-                                        #     self.PT_dict[self.count],
-                                        #     (115, 220, 255),
-                                        #     3,
-                                        # )
-                                        bounce_len = self.Euclidean_Distance(
-                                            self.PT_dict[self.bounce_frame_L][0],
-                                            self.PT_dict[self.bounce_frame_L][1],
-                                            self.PT_dict[self.count][0],
-                                            self.PT_dict[self.count][1],
+                            # 回擊
+                            elif self.now_player == 1 and self.is_serve_wait:
+                                if self.hit_count > 0:
+                                    # like yellow
+                                    # cv2.line(
+                                    #     self.img_opt,
+                                    #     self.PT_dict[self.bounce_frame_L],
+                                    #     self.PT_dict[self.count],
+                                    #     (115, 220, 255),
+                                    #     3,
+                                    # )
+                                    bounce_len = self.Euclidean_Distance(
+                                        self.PT_dict[self.bounce_frame_L][0],
+                                        self.PT_dict[self.bounce_frame_L][1],
+                                        self.PT_dict[self.count][0],
+                                        self.PT_dict[self.count][1],
+                                    )
+                                    speed_bounce_distance_left = abs(
+                                        self.shotspeed_previous
+                                        * (100 / 1)
+                                        * (self.left_shot_count - self.bounce_frame_L)
+                                        / self.framerate
+                                    )
+                                    self.speed_left = np.round(
+                                        (
+                                            (bounce_len * (self.miniboard_to_real_ratio) + speed_bounce_distance_left)
+                                            / (self.count - self.left_shot_count)
                                         )
-                                        speed_bounce_distance_left = abs(
-                                            self.shotspeed_previous
-                                            * (100000 / 3600)
-                                            * (self.left_shot_count - self.bounce_frame_L)
-                                            / self.framerate
-                                        )
-                                        self.speed_left = np.round(
-                                            (
-                                                (
-                                                    bounce_len * (self.miniboard_to_real_ratio)
-                                                    + speed_bounce_distance_left
-                                                )
-                                                / (self.count - self.left_shot_count)
-                                            )
-                                            * self.framerate
-                                            * (3600 / 100000),
-                                            1,
-                                        )
-                                        if self.speed_left > 100:
-                                            self.speed_left = 60
+                                        * self.framerate
+                                        * (1 / 100),
+                                        1,
+                                    )
+                                    if self.speed_left > 100:
+                                        self.speed_left = 60
 
-                                        self.shotspeed = self.speed_left
-                                        self.shotspeed_previous = self.speed_left
-                                        print(f"Frame : {self.count} self.speed_left : {self.speed_left} ")
-                                        self.left_speed_list.append(self.speed_left)
-                                        if self.is_show_speed_analysis:
-                                            self.Draw_SpeedHist(save=False, show=self.is_show_speed_analysis)
-                                    self.is_first_ball = False
-                                    self.hit_count += 1
-                                    self.now_player = 0
-                                    self.bounce_frame_R = self.count
-                                    self.Draw_and_Collect_Data(
-                                        (80, 127, 255),
-                                        loc_PT,
-                                    )
+                                    self.shotspeed = self.speed_left
+                                    self.shotspeed_previous = self.speed_left
+                                    print(f"Frame : {self.count} self.speed_left : {self.speed_left} ")
+                                    self.left_speed_list.append(self.speed_left)
+                                    if self.is_show_speed_analysis:
+                                        self.Draw_SpeedHist(save=False, show=self.is_show_speed_analysis)
+                                self.is_first_ball = False
+                                self.hit_count += 1
+                                self.now_player = 0
+                                self.bounce_frame_R = self.count
+                                self.Draw_and_Collect_Data(
+                                    (80, 127, 255),
+                                    loc_PT,
+                                )
 
-                                # 其他
-                                elif (self.count - self.bounce_frame_R) > 60:
-                                    print("[------------------------------------------------------------]")
-                                    print(
-                                        f"sth wrong at frame : {self.count}, bounce_L : {self.bounce_frame_L}, self.hit_count : {self.hit_count}"
-                                    )
-                                    print("[------------------------------------------------------------]")
-                                    self.is_first_ball = False
-                                    self.is_serve_wait = True
-                                    self.now_player = 0
-                                    self.bounce_frame_R = self.count
-                                    self.hit_count = 1
-                                    self.img_opt = self.Draw_MiniBoard()
-                                    self.Draw_and_Collect_Data(
-                                        (80, 127, 255),
-                                        loc_PT,
-                                    )
+                            # 其他
+                            elif (self.count - self.bounce_frame_R) > 60:
+                                print("[------------------------------------------------------------]")
+                                print(
+                                    f"sth wrong at frame : {self.count}, bounce_L : {self.bounce_frame_L}, self.hit_count : {self.hit_count}"
+                                )
+                                print("[------------------------------------------------------------]")
+                                self.is_first_ball = False
+                                self.is_serve_wait = True
+                                self.now_player = 0
+                                self.bounce_frame_R = self.count
+                                self.hit_count = 1
+                                self.img_opt = self.Draw_MiniBoard()
+                                self.Draw_and_Collect_Data(
+                                    (80, 127, 255),
+                                    loc_PT,
+                                )
 
             ## 超過一秒都沒有球落在球桌上
             if (self.count - self.bounce_frame_L) >= 60 and (self.count - self.bounce_frame_R) >= 60:  # 超過1秒
@@ -869,17 +1004,11 @@ class Trajectory:
                 self.bounce_frame_L, self.bounce_frame_R = -1, -1
                 self.hit_count = 0
 
-            if self.is_record_ball:
-                self.record_ball[self.count] = {
-                    "x_c_pred": self.x_c_pred,
-                    "y_c_pred": self.y_c_pred,
-                    "speed": self.shotspeed,
-                }
         return image_CV
 
     def Add_Ball_In_Queue(self):
         self.q.appendleft(
-            (self.x_c_pred, self.y_c_pred) if self.x_c_pred != np.inf and self.y_c_pred != np.inf else (-1, -1)
+            (self.x_c_pred, self.y_c_pred) if self.x_c_pred != None and self.y_c_pred != None else (-1, -1)
         )
         self.q.pop()
 
@@ -911,7 +1040,146 @@ class Trajectory:
 
         return ball_direction, ball_direction_last
 
-    def Draw_On_Image(self, image_CV, ball_direction):
+    def Draw_On_Image(self, image_CV):
+        # draw current frame prediction and previous 11 frames as yellow circle, total: 12 frames
+        for i in range(12):
+            if self.q[i] != (-1, -1):
+                cv2.circle(image_CV, (self.q[i][0], self.q[i][1]), 5, (0, 255, 255), 1)
+
+        # draw bounce point as red circle
+        for i in range(6):
+            if self.q_bv[i] != (-1, -1):
+                cv2.circle(image_CV, (self.q_bv[i][0], self.q_bv[i][1]), 5, (0, 0, 255), 4)
+
+        # Place miniboard on upper right corner
+        if self.is_show_bounce:
+            if self.is_show_bounce_window:
+                self.Show_Bounce()
+            else:
+                image_CV[
+                    : self.miniboard_height + self.miniboard_edge * 2,
+                    self.frame_width - (self.miniboard_width + self.miniboard_edge * 2) :,
+                ] = self.img_opt
+
+        # 順時速度
+        image_CV_real_time_speed = image_CV.copy()
+        if self.is_real_time_speed:
+            if self.real_time_speed:
+                cv2.putText(
+                    image_CV_real_time_speed,
+                    f"{self.real_time_speed:0.1f}(m/s)",
+                    (self.x_ltop_pred, self.y_ltop_pred),
+                    cv2.FONT_HERSHEY_TRIPLEX,
+                    1.0,
+                    (0, 255, 255),
+                    1,
+                    cv2.LINE_AA,
+                )
+
+        # 將球的方向判斷出來
+        if self.ball_direction == "right":  # Direction right
+            cv2.putText(
+                image_CV,
+                "right",
+                (240, 100),
+                cv2.FONT_HERSHEY_TRIPLEX,
+                1,
+                (0, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
+        elif self.ball_direction == "left":  # Direction left
+            cv2.putText(
+                image_CV,
+                "left",
+                (240, 100),
+                cv2.FONT_HERSHEY_TRIPLEX,
+                1,
+                (0, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
+
+        # # 標示出球速
+        if self.MAX_velo > 113:
+            cv2.putText(
+                image_CV,
+                "          " + "Loss",
+                (10, 40),
+                cv2.FONT_HERSHEY_TRIPLEX,
+                1,
+                (0, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
+        elif self.ball_direction != "unknown":
+            cv2.putText(
+                image_CV,
+                "          " + str(self.shotspeed),
+                (10, 40),
+                cv2.FONT_HERSHEY_TRIPLEX,
+                1,
+                (0, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
+        # 無法辨別球路方向時
+        else:
+            cv2.putText(
+                image_CV,
+                "          " + "0",
+                (10, 40),
+                cv2.FONT_HERSHEY_TRIPLEX,
+                1,
+                (0, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
+
+        # # 其他左上角的文字
+        cv2.putText(
+            image_CV,
+            "Speed:",
+            (10, 40),
+            cv2.FONT_HERSHEY_TRIPLEX,
+            1,
+            (0, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            image_CV,
+            "(m/s)",
+            (260, 40),
+            cv2.FONT_HERSHEY_TRIPLEX,
+            1,
+            (0, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
+
+        cv2.putText(
+            image_CV,
+            "Direction :",
+            (10, 100),
+            cv2.FONT_HERSHEY_TRIPLEX,
+            1,
+            (0, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            image_CV,
+            f"Frame : {self.count}",
+            (10, 160),
+            cv2.FONT_HERSHEY_TRIPLEX,
+            1,
+            (0, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
+
+        # 右下角顯示
         image_CV_height, image_CV_width, _ = image_CV.shape
         bounce_analyze_img = self.bounce_analyze_img
         set_height = 325
@@ -938,189 +1206,7 @@ class Trajectory:
             :,
         ] = img_opt_bounce_location
 
-        # draw current frame prediction and previous 11 frames as yellow circle, total: 12 frames
-        for i in range(12):
-            if self.q[i] != (-1, -1):
-                cv2.circle(image_CV, (self.q[i][0], self.q[i][1]), 5, (0, 255, 255), 1)
-
-        # draw bounce point as red circle
-        for i in range(6):
-            if self.q_bv[i] != (-1, -1):
-                cv2.circle(image_CV, (self.q_bv[i][0], self.q_bv[i][1]), 5, (0, 0, 255), 4)
-
-        # Place miniboard on upper right corner
-        if self.is_show_bounce:
-            if self.is_show_bounce_window:
-                self.Show_Bounce()
-            else:
-                image_CV[
-                    : self.miniboard_height + self.miniboard_edge * 2,
-                    self.frame_width - (self.miniboard_width + self.miniboard_edge * 2) :,
-                ] = self.img_opt
-
-        # 將球的方向判斷出來
-        # if not self.only_speed:
-        #     if ball_direction != None and ball_direction > 0:  # Direction right
-        #         cv2.putText(
-        #             image_CV,
-        #             "right",
-        #             (240, 100),
-        #             cv2.FONT_HERSHEY_TRIPLEX,
-        #             1,
-        #             (0, 255, 255),
-        #             1,
-        #             cv2.LINE_AA,
-        #         )
-        #     elif ball_direction != None and ball_direction < 0:  # Direction left
-        #         cv2.putText(
-        #             image_CV,
-        #             "left",
-        #             (240, 100),
-        #             cv2.FONT_HERSHEY_TRIPLEX,
-        #             1,
-        #             (0, 255, 255),
-        #             1,
-        #             cv2.LINE_AA,
-        #         )
-
-        # # 標示出球速
-        if not self.only_speed:
-            if self.MAX_velo > 113:
-                cv2.putText(
-                    image_CV,
-                    "          " + "Loss",
-                    (10, 40),
-                    cv2.FONT_HERSHEY_TRIPLEX,
-                    1,
-                    (0, 255, 255),
-                    1,
-                    cv2.LINE_AA,
-                )
-            elif ball_direction is not None:
-                cv2.putText(
-                    image_CV,
-                    "          " + str(self.shotspeed),
-                    (10, 40),
-                    cv2.FONT_HERSHEY_TRIPLEX,
-                    1,
-                    (0, 255, 255),
-                    1,
-                    cv2.LINE_AA,
-                )
-            # 無法辨別球路方向時
-            else:
-                cv2.putText(
-                    image_CV,
-                    "          " + "0",
-                    (10, 40),
-                    cv2.FONT_HERSHEY_TRIPLEX,
-                    1,
-                    (0, 255, 255),
-                    1,
-                    cv2.LINE_AA,
-                )
-        else:
-            if self.MAX_velo > 113:
-                cv2.putText(
-                    image_CV,
-                    "         " + "Loss",
-                    (10, 80),
-                    cv2.FONT_HERSHEY_TRIPLEX,
-                    2,
-                    (0, 255, 255),
-                    2,
-                    cv2.LINE_AA,
-                )
-            elif ball_direction is not None:
-                cv2.putText(
-                    image_CV,
-                    "         " + str(self.shotspeed),
-                    (10, 80),
-                    cv2.FONT_HERSHEY_TRIPLEX,
-                    2,
-                    (0, 255, 255),
-                    2,
-                    cv2.LINE_AA,
-                )
-            # 無法辨別球路方向時
-            else:
-                cv2.putText(
-                    image_CV,
-                    "         " + "0",
-                    (10, 80),
-                    cv2.FONT_HERSHEY_TRIPLEX,
-                    2,
-                    (0, 255, 255),
-                    2,
-                    cv2.LINE_AA,
-                )
-
-        # # 其他左上角的文字
-        if not self.only_speed:
-            cv2.putText(
-                image_CV,
-                "Speed:",
-                (10, 40),
-                cv2.FONT_HERSHEY_TRIPLEX,
-                1,
-                (0, 255, 255),
-                1,
-                cv2.LINE_AA,
-            )
-            cv2.putText(
-                image_CV,
-                "(Km/Hr)",
-                (260, 40),
-                cv2.FONT_HERSHEY_TRIPLEX,
-                1,
-                (0, 255, 255),
-                1,
-                cv2.LINE_AA,
-            )
-        else:
-            cv2.putText(
-                image_CV,
-                "Speed:",
-                (10, 80),
-                cv2.FONT_HERSHEY_TRIPLEX,
-                2,
-                (0, 255, 255),
-                2,
-                cv2.LINE_AA,
-            )
-            cv2.putText(
-                image_CV,
-                "(Km/Hr)",
-                (10, 160),
-                cv2.FONT_HERSHEY_TRIPLEX,
-                2,
-                (0, 255, 255),
-                2,
-                cv2.LINE_AA,
-            )
-        # if not self.only_speed:
-        #     cv2.putText(
-        #         image_CV,
-        #         "Direction :",
-        #         (10, 100),
-        #         cv2.FONT_HERSHEY_TRIPLEX,
-        #         1,
-        #         (0, 255, 255),
-        #         1,
-        #         cv2.LINE_AA,
-        #     )
-        # cv2.putText(
-        #     image_CV,
-        #     f"Frame : {self.count}",
-        #     (10, 40),
-        #     cv2.FONT_HERSHEY_TRIPLEX,
-        #     1,
-        #     (0, 255, 255),
-        #     1,
-        #     cv2.LINE_AA,
-        # )
-
-        return image_CV
+        return image_CV, image_CV_real_time_speed
 
     def Write_Bounce_Location(self):
         bounce_loc_pd = pd.DataFrame(self.bounce_location_list)
@@ -1161,8 +1247,8 @@ class Trajectory:
         self.WIDTH = 512
 
         # 影片跟目錄
-        root_path = f"./runs/detect/pitching_machine_20241019"
-        video_fullname = "C0086.MP4"
+        root_path = f"./runs/detect/105_01_20250430"
+        video_fullname = "105_01.mp4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
         self.input_path = os.path.join(root_path, video_fullname)
@@ -1218,14 +1304,15 @@ class Trajectory:
         self.hit_count = 0  # 擊球次數
         self.count = 1  # 記錄處理幾個 Frame
         self.MAX_velo = 0  # 最大球速
-        self.x_c_pred, self.y_c_pred = np.inf, np.inf  # 球體中心位置
+        self.past_x_c_pred, self.past_y_c_pred = None, None  # 球體上一次中心位置
+        self.x_c_pred, self.y_c_pred = None, None  # 球體中心位置
         self.is_first_ball = True  # 每局第一球的時候frame只要5個，其他時間要9個
         self.is_serve_wait = False
         self.shotspeed = 0
         self.shotspeed_previous = 0
 
         # 顯示參數
-        self.is_show_bounce = True
+        self.is_show_bounce = False
         self.is_show_bounce_window = False
         self.is_show_bounce_analysis = False
         self.is_show_bounce_location = False
@@ -1248,9 +1335,24 @@ class Trajectory:
             self.Draw_SpeedHist(save=False, show=True)
             self.video_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-        self.is_record_ball = True
-        if self.is_record_ball:
-            self.record_ball = {}
+        self.ball_direction = "unknown"  # 球當下的方向(給拋物線用)
+        self.is_real_time_speed = True  # 使否即時顯示球速
+        if self.is_real_time_speed:
+            self.past_c_frame_number = 1  # 上一次取得球的frame
+            self.real_time_ball_direction = "unknown"  # 球當下的方向(給realtime speed)
+            self.real_time_past_ball_direction = "unknown"  # 上一次球的方向(給realtime speed)
+            self.real_time_speed = None  # 及時球速
+            self.real_time_speed_index_head = 0  # 擷取影像的分段標籤(頭)
+            self.real_time_speed_index_last = 0  # 擷取影像的分段標籤(尾)
+            self.real_time_speed_save_tag = False  # 是否可以儲存影片
+            self.last_frame_switch_ball_direction = 1  # 最後變換方向的frame
+            self.save_queue_threadhold_by_switch_ball_direction = 120  # 多少個frame沒有變換方向則儲存
+            self.save_queue_minimum_frame_size = 10  # 至少有多少個frame才儲存影片
+            self.control_queue = mp.Queue()  # 儲存影片
+            self.real_time_speed_process = mp.Process(
+                target=self.Real_Time_Speed_Process, args=(self.control_queue, self.save_queue_minimum_frame_size)
+            )
+            self.real_time_speed_process.start()
 
     def Set_Frame_Info(self, frame_height, frame_width, framerate):
         self.frame_height = frame_height
@@ -1284,19 +1386,22 @@ class Trajectory:
         k = batch // 2
         while success:
             label_file = os.path.join(self.label_path, f"{self.video_name}_{self.count}.txt")
-            if os.path.exists(label_file):
-                self.Read_Yolo_Label_One_Frame(label_file=label_file)
-            if self.count == 568:
-                print("test")
+            self.Read_Yolo_Label_One_Frame(label_file=label_file)
             image_CV = self.Detect_Trajectory(image)
             self.Add_Ball_In_Queue()
-            ball_direction, ball_direction_last = self.Detect_Ball_Direction()
-            image_CV = self.Draw_On_Image(image_CV, ball_direction)
+            _ = self.Detect_Ball_Direction()
+            image_CV, image_CV_real_time_speed = self.Draw_On_Image(image_CV)
+            if self.is_real_time_speed:
+                real_time_speed_index_last = self.Generate_Real_Time_Speed_index()
+                self.Control_Queue("frame", real_time_speed_index_last, image_CV_real_time_speed)
+                is_save_real_time_speed = self.Is_Save_Queue()
+                if is_save_real_time_speed:
+                    self.Raise_Save_Queue()
 
             self.Next_Count()
             if self.count >= total_frames - 12:
                 break
-            output.write(image_CV)
+            output.write(image_CV_real_time_speed)
             success, image = cap.read()
 
         # For releasing cap and out.
@@ -1316,27 +1421,8 @@ class Trajectory:
         # For saving speedHist
         self.Draw_SpeedHist()
 
-        if self.is_record_ball:
-            # input video
-            success, image, cap, framerate, frame_height, frame_width, total_frames = self.Read_Video(video_path)
-            self.Set_Frame_Info(frame_height, frame_width, framerate)
-            self.count = 1
-
-            # output video
-            video_path_with_speed = f"{self.video_path}/{self.video_name}_predict_12_with_speed.mp4"
-            output = self.Write_Video(video_path_with_speed, size)
-
-            with tqdm(total=total_frames) as pbar:
-                while success:
-                    image = self.Draw_Speed_Under_Ball(image)
-                    self.Next_Count()
-                    output.write(image)
-                    success, image = cap.read()
-                    pbar.update(1)
-
-            # For releasing cap and out.
-            cap.release()
-            output.release()
+        # 離開
+        self.Exit_Save_Queue()
 
         end = time.time()
         print(f"Write video time: {end-start} seconds.")

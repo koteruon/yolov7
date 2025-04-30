@@ -333,8 +333,15 @@ class YoloV7:
                 if trajectory:
                     image_CV = trajectory.Detect_Trajectory(im0)
                     trajectory.Add_Ball_In_Queue()
-                    ball_direction, ball_direction_last = trajectory.Detect_Ball_Direction()
-                    image_CV = trajectory.Draw_On_Image(image_CV, ball_direction)
+                    _ = trajectory.Detect_Ball_Direction()
+                    image_CV, image_CV_real_time_speed = trajectory.Draw_On_Image(image_CV)
+                    if opt.is_real_time_speed:
+                        real_time_speed_index_last = trajectory.Generate_Real_Time_Speed_index()
+                        trajectory.Control_Queue("frame", real_time_speed_index_last, image_CV_real_time_speed)
+                        is_save_real_time_speed = trajectory.Is_Save_Queue()
+                        if is_save_real_time_speed:
+                            trajectory.Raise_Save_Queue()
+
                     trajectory.Next_Count()
                     if view_img:
                         cv2.imshow("Realtime Trajectory", image_CV)
@@ -390,6 +397,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--fps", default="60", help="fps")
     parser.add_argument("--opencv-or-ffmpeg", default="opencv", help="opencv or ffmpeg")
+    parser.add_argument("--is-real-time-speed", action="store_true", help="is-real-time-speed")
     opt = parser.parse_args()
     print(opt)
     # check_requirements(exclude=('pycocotools', 'thop'))
