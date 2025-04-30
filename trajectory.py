@@ -211,94 +211,104 @@ class Trajectory:
             return color
 
     def Draw_Bounce_Analysis(self):
-        # 落點分析圖
-        self.bounce_analyze_img = self.Draw_MiniBoard("bounce")
-        score_table = np.zeros((4, 3), dtype=int)
+        if self.is_show_bounce_analysis:
+            # 落點分析圖
+            self.bounce_analyze_img = self.Draw_MiniBoard("bounce")
+            score_table = np.zeros((4, 3), dtype=int)
 
-        # calculate side sum
-        left_bounce_sum = np.sum(self.bounce_location_list[:2])
-        right_bounce_sum = np.sum(self.bounce_location_list[2:])
+            # calculate side sum
+            left_bounce_sum = np.sum(self.bounce_location_list[:2])
+            right_bounce_sum = np.sum(self.bounce_location_list[2:])
 
-        # calculate side score
-        ### Calculate score for left side
-        if left_bounce_sum != 0:
-            left_scores = np.round((self.bounce_location_list[:2] / left_bounce_sum) * 100).astype(int)
-        else:
-            left_scores = np.zeros((2, 3), dtype=int)
-        ### Calculate score for right side
-        if right_bounce_sum != 0:
-            right_scores = np.round((self.bounce_location_list[2:] / right_bounce_sum) * 100).astype(int)
-        else:
-            right_scores = np.zeros((2, 3), dtype=int)
-        ### Assign scores to score_table
-        score_table[:2] = left_scores
-        score_table[2:] = right_scores
+            # calculate side score
+            ### Calculate score for left side
+            if left_bounce_sum != 0:
+                left_scores = np.round((self.bounce_location_list[:2] / left_bounce_sum) * 100).astype(int)
+            else:
+                left_scores = np.zeros((2, 3), dtype=int)
+            ### Calculate score for right side
+            if right_bounce_sum != 0:
+                right_scores = np.round((self.bounce_location_list[2:] / right_bounce_sum) * 100).astype(int)
+            else:
+                right_scores = np.zeros((2, 3), dtype=int)
+            ### Assign scores to score_table
+            score_table[:2] = left_scores
+            score_table[2:] = right_scores
 
-        # find max and min
-        ### Find min and max for left side
-        left_score_min = np.min(score_table[:2])
-        left_score_max = np.max(score_table[:2])
+            # find max and min
+            ### Find min and max for left side
+            left_score_min = np.min(score_table[:2])
+            left_score_max = np.max(score_table[:2])
 
-        ### Find min and max for right side
-        right_score_min = np.min(score_table[2:])
-        right_score_max = np.max(score_table[2:])
+            ### Find min and max for right side
+            right_score_min = np.min(score_table[2:])
+            right_score_max = np.max(score_table[2:])
 
-        for i in range(4):
-            for j in range(3):
-                if i < 2:
-                    # left
-                    color_detect = self.Detect_Color_Level(score_table[i][j], "left", left_score_min, left_score_max)
-                else:
-                    # right
-                    color_detect = self.Detect_Color_Level(score_table[i][j], "right", right_score_min, right_score_max)
-                text = str(score_table[i][j]) + "%"
-                cv2.rectangle(
-                    self.bounce_analyze_img,
-                    (
-                        self.miniboard_edge + (i * int(self.miniboard_width / 4)) + 10,
-                        self.miniboard_edge + (j * int(self.miniboard_height / 3)) + 10,
-                    ),
-                    (
-                        ((i + 1) * int(self.miniboard_width / 4)) + self.miniboard_edge - 10,
-                        ((j + 1) * int(self.miniboard_height / 3)) + self.miniboard_edge - 10,
-                    ),
-                    color=color_detect,
-                    thickness=-1,
-                )
-                cv2.putText(
-                    self.bounce_analyze_img,
-                    text,
-                    (
-                        self.miniboard_edge + (i * int(self.miniboard_width / 4)) + self.miniboard_edge * 2,
-                        self.miniboard_edge + (j * int(self.miniboard_height / 3)) + self.miniboard_text_bias,
-                    ),
-                    cv2.FONT_HERSHEY_COMPLEX_SMALL,
-                    1,
-                    (1, 1, 1),
-                    1,
-                    cv2.LINE_AA,
-                )
+            for i in range(4):
+                for j in range(3):
+                    if i < 2:
+                        # left
+                        color_detect = self.Detect_Color_Level(
+                            score_table[i][j], "left", left_score_min, left_score_max
+                        )
+                    else:
+                        # right
+                        color_detect = self.Detect_Color_Level(
+                            score_table[i][j], "right", right_score_min, right_score_max
+                        )
+                    text = str(score_table[i][j]) + "%"
+                    cv2.rectangle(
+                        self.bounce_analyze_img,
+                        (
+                            self.miniboard_edge + (i * int(self.miniboard_width / 4)) + 10,
+                            self.miniboard_edge + (j * int(self.miniboard_height / 3)) + 10,
+                        ),
+                        (
+                            ((i + 1) * int(self.miniboard_width / 4)) + self.miniboard_edge - 10,
+                            ((j + 1) * int(self.miniboard_height / 3)) + self.miniboard_edge - 10,
+                        ),
+                        color=color_detect,
+                        thickness=-1,
+                    )
+                    cv2.putText(
+                        self.bounce_analyze_img,
+                        text,
+                        (
+                            self.miniboard_edge + (i * int(self.miniboard_width / 4)) + self.miniboard_edge * 2,
+                            self.miniboard_edge + (j * int(self.miniboard_height / 3)) + self.miniboard_text_bias,
+                        ),
+                        cv2.FONT_HERSHEY_COMPLEX_SMALL,
+                        1,
+                        (1, 1, 1),
+                        1,
+                        cv2.LINE_AA,
+                    )
 
     def Show_Bounce(self):
-        cv2.imshow(self.bounce_title, self.img_opt)
+        if self.is_show_bounce_window:
+            cv2.imshow(self.bounce_title, self.img_opt)
 
     def Show_Bounce_Analysis(self):
-        cv2.imshow(self.bounce_analysis_title, self.bounce_analyze_img)
+        if self.is_show_bounce_analysis:
+            cv2.imshow(self.bounce_analysis_title, self.bounce_analyze_img)
 
     def Save_Bounce_Analysis(self):
-        cv2.imwrite(
-            f"{self.analysis_img_path}/{self.video_name}_analysis.jpg",
-            self.bounce_analyze_img,
-        )
+        if self.is_save_bounce_analysis:
+            cv2.imwrite(
+                f"{self.analysis_img_path}/{self.video_name}_analysis.jpg",
+                self.bounce_analyze_img,
+            )
 
     def Show_Bounce_Location(self):
-        cv2.imshow(self.bounce_location_title, self.img_opt_bounce_location)
+        if self.is_show_bounce_location:
+            cv2.imshow(self.bounce_location_title, self.img_opt_bounce_location)
 
     def Save_Bounce_Location(self):
-        cv2.imwrite(
-            f"{self.bounce_img_path}/{self.video_name}_bounce.jpg",
-            self.img_opt_bounce_location,
-        )
+        if self.is_save_bounce_location:
+            cv2.imwrite(
+                f"{self.bounce_img_path}/{self.video_name}_bounce.jpg",
+                self.img_opt_bounce_location,
+            )
 
     def Draw_SpeedHist(self, save=True, show=False):
         # 繪製速度直方圖
@@ -439,11 +449,9 @@ class Trajectory:
         )
         # analyze location
         self.Count_BounceLocation(self.PT_dict[self.count])
-        if self.is_show_bounce_analysis:
-            self.Draw_Bounce_Analysis()
-            self.Show_Bounce_Analysis()
-        if self.is_show_bounce_location:
-            self.Show_Bounce_Location()
+        self.Draw_Bounce_Analysis()
+        self.Show_Bounce_Analysis()
+        self.Show_Bounce_Location()
         p_inv = self.Perspective_Transform(self.inv, loc_PT)
         self.bounce.append([self.count, p_inv[0], p_inv[1]])
         self.q_bv.appendleft(p_inv)
@@ -633,11 +641,9 @@ class Trajectory:
             self.m_per_pixel = (self.real_table_width_cm / 100) / self.table_pixel_length
 
         # 顯示
-        if self.is_show_bounce_analysis:
-            self.Draw_Bounce_Analysis()
-            self.Show_Bounce_Analysis()
-        if self.is_show_bounce_location:
-            self.Show_Bounce_Location()
+        self.Draw_Bounce_Analysis()
+        self.Show_Bounce_Analysis()
+        self.Show_Bounce_Location()
 
     def Estimate_Ball_Speed_kmh(self):
         if self.x_c_pred == None or self.past_x_c_pred == None or self.y_c_pred == None or self.past_y_c_pred == None:
@@ -701,7 +707,7 @@ class Trajectory:
                         if save_queue_minimum_frame_size < len(frames):
                             height, width, _ = frames[0].shape
                             out = cv2.VideoWriter(
-                                f"video_{tag:03d}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 10, (width, height)
+                                f"video_{tag:03d}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 5, (width, height)
                             )
                             for f in frames:
                                 out.write(f)
@@ -1053,9 +1059,8 @@ class Trajectory:
 
         # Place miniboard on upper right corner
         if self.is_show_bounce:
-            if self.is_show_bounce_window:
-                self.Show_Bounce()
-            else:
+            self.Show_Bounce()
+            if not self.is_show_bounce_window:
                 image_CV[
                     : self.miniboard_height + self.miniboard_edge * 2,
                     self.frame_width - (self.miniboard_width + self.miniboard_edge * 2) :,
@@ -1209,8 +1214,9 @@ class Trajectory:
         return image_CV, image_CV_real_time_speed
 
     def Write_Bounce_Location(self):
-        bounce_loc_pd = pd.DataFrame(self.bounce_location_list)
-        bounce_loc_pd.to_csv(f"{self.bounce_loc_path}/{self.video_name}_bounce_list.csv", index=False)
+        if self.is_write_bounce_location:
+            bounce_loc_pd = pd.DataFrame(self.bounce_location_list)
+            bounce_loc_pd.to_csv(f"{self.bounce_loc_path}/{self.video_name}_bounce_list.csv", index=False)
 
     def Draw_Speed_Under_Ball(self, image):
         if self.count in self.record_ball:
@@ -1312,27 +1318,34 @@ class Trajectory:
         self.shotspeed_previous = 0
 
         # 顯示參數
+        self.is_write_bounce_location = False  # True
+        self.is_save_bounce_analysis = False  # True
+        self.is_save_bounce_location = False  # True
         self.is_show_bounce = False
         self.is_show_bounce_window = False
         self.is_show_bounce_analysis = False
         self.is_show_bounce_location = False
         self.is_show_speed_analysis = False
         if real_time:
-            self.is_show_bounce_window = True
-            self.bounce_title = "Bounce"
-            cv2.namedWindow(self.bounce_title, cv2.WINDOW_NORMAL)
-            self.is_show_bounce_analysis = True
-            self.bounce_analysis_title = "Bounce Analysis"
-            cv2.namedWindow(self.bounce_analysis_title, cv2.WINDOW_NORMAL)
-            self.is_show_bounce_location = True
-            self.bounce_location_title = "Bounce Location"
-            cv2.namedWindow(self.bounce_location_title, cv2.WINDOW_NORMAL)
-            self.is_show_speed_analysis = True
-            self.speedhis_title = "Speed Histogram"
-            cv2.namedWindow(self.speedhis_title, cv2.WINDOW_NORMAL)
-            self.speed_distribution_title = "Speed Distribution"
-            cv2.namedWindow(self.speed_distribution_title, cv2.WINDOW_NORMAL)
-            self.Draw_SpeedHist(save=False, show=True)
+            self.is_show_bounce_window = False
+            if self.is_show_bounce_window:
+                self.bounce_title = "Bounce"
+                cv2.namedWindow(self.bounce_title, cv2.WINDOW_NORMAL)
+            self.is_show_bounce_analysis = False
+            if self.is_show_bounce_analysis:
+                self.bounce_analysis_title = "Bounce Analysis"
+                cv2.namedWindow(self.bounce_analysis_title, cv2.WINDOW_NORMAL)
+            self.is_show_bounce_location = False
+            if self.is_show_bounce_location:
+                self.bounce_location_title = "Bounce Location"
+                cv2.namedWindow(self.bounce_location_title, cv2.WINDOW_NORMAL)
+            self.is_show_speed_analysis = False
+            if self.is_show_speed_analysis:
+                self.speedhis_title = "Speed Histogram"
+                cv2.namedWindow(self.speedhis_title, cv2.WINDOW_NORMAL)
+                self.speed_distribution_title = "Speed Distribution"
+                cv2.namedWindow(self.speed_distribution_title, cv2.WINDOW_NORMAL)
+                self.Draw_SpeedHist(save=False, show=self.is_show_speed_analysis)
             self.video_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
         self.ball_direction = "unknown"  # 球當下的方向(給拋物線用)

@@ -196,7 +196,8 @@ class YoloV7:
                                 continue
 
                         lines.append((cls, *xywh, conf) if opt.save_conf else (cls, *xywh))  # label format
-                        label = f"{names[int(0)]} {conf.item():.2f}"
+                        # label = f"{names[int(0)]} {conf.item():.2f}"
+                        label = ""
                         plot_one_box(xyxy, im0, label=label, color=colors[int(0)], line_thickness=1)
 
                 if opt.save_video and view_img:
