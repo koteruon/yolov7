@@ -704,15 +704,16 @@ class Trajectory:
                 elif cmd == "save":
                     if tag in buffers and buffers[tag]:
                         frames = buffers[tag]
-                        if save_queue_minimum_frame_size < len(frames):
+                        frames_size = len(frames)
+                        if save_queue_minimum_frame_size < frames_size:
                             height, width, _ = frames[0].shape
                             out = cv2.VideoWriter(
-                                f"video_{tag:03d}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 5, (width, height)
+                                f"{tag:03d}_{frames_size}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 5, (width, height)
                             )
                             for f in frames:
                                 out.write(f)
                             out.release()
-                            print(f"影片 video_{tag:03d}.mp4 儲存完成")
+                            print(f"影片 {tag:03d}_{frames_size}.mp4 儲存完成")
                         save_triggered.add(tag)  # 標記為已儲存
                         buffers[tag].clear()
                 elif cmd == "exit":
@@ -734,12 +735,13 @@ class Trajectory:
             balls = []
         # 取得Yolo預測球的位置
         if label_file:
-            with open(label_file, "r") as f:
-                for line in f:
-                    l = line.split()
-                    if len(l) > 0:
-                        if int(l[0]) == 0:
-                            balls.append(l)
+            if os.path.exists(label_file):
+                with open(label_file, "r") as f:
+                    for line in f:
+                        l = line.split()
+                        if len(l) > 0:
+                            if int(l[0]) == 0:
+                                balls.append(l)
 
         if len(balls) == 0:
             self.x_c_pred, self.y_c_pred = None, None
@@ -1253,8 +1255,8 @@ class Trajectory:
         self.WIDTH = 512
 
         # 影片跟目錄
-        root_path = f"./runs/detect/105_01_20250430"
-        video_fullname = "105_01.mp4"
+        root_path = f"./runs/detect/105_03_20250430"
+        video_fullname = "105_03.mp4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
         self.input_path = os.path.join(root_path, video_fullname)

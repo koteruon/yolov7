@@ -307,9 +307,9 @@ class YoloV7:
                                             f.write(("%g " * len(line)).rstrip() % line + "\n")
 
                                 if save_img or view_img:  # Add bbox to image
-                                    if not opt.only_one_ball or int(cls) != 0:
+                                    if not opt.only_one_ball or (int(cls) != 0 and not only_ball):
                                         if opt.no_show_conf and opt.no_show_label:
-                                            label = None
+                                            label = ""
                                         elif opt.no_show_conf:
                                             label = f"{names[int(cls)]}"
                                         else:
@@ -339,7 +339,7 @@ class YoloV7:
                                 opt.only_one_ball and most_confidence != -1 and most_confidence_ball_xyxy != None
                             ):  # Add bbox to image
                                 if opt.no_show_conf and opt.no_show_label:
-                                    label = None
+                                    label = ""
                                 elif opt.no_show_conf:
                                     label = f"{names[int(0)]}"
                                 else:
