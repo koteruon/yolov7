@@ -692,7 +692,7 @@ class Trajectory:
             self.Control_Queue("exit", index, None)
         self.real_time_speed_process.join()
 
-    def Real_Time_Speed_Process(self, control_queue, save_queue_minimum_frame_size):
+    def Real_Time_Speed_Process(self, root_path, control_queue, save_queue_minimum_frame_size):
         buffers = defaultdict(list)
         save_triggered = set()
         while True:
@@ -707,13 +707,17 @@ class Trajectory:
                         frames_size = len(frames)
                         if save_queue_minimum_frame_size < frames_size:
                             height, width, _ = frames[0].shape
+                            video_path = os.path.join(root_path, f"{tag:03d}_{frames_size}.mp4")
                             out = cv2.VideoWriter(
-                                f"{tag:03d}_{frames_size}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 5, (width, height)
+                                video_path,
+                                cv2.VideoWriter_fourcc(*"mp4v"),
+                                5,
+                                (width, height),
                             )
                             for f in frames:
                                 out.write(f)
                             out.release()
-                            print(f"影片 {tag:03d}_{frames_size}.mp4 儲存完成")
+                            print(f"影片 {video_path} 儲存完成")
                         save_triggered.add(tag)  # 標記為已儲存
                         buffers[tag].clear()
                 elif cmd == "exit":
@@ -797,8 +801,9 @@ class Trajectory:
         if len(x_tmp) >= 3:
             # 檢查是否嚴格遞增或嚴格遞減,(軌跡方向是否相同) x_tmp是左邊新右邊舊，所以要相反
             self.ball_direction = self.Monotonic(x_tmp[::-1], strictly=False, half=False)
+            self.show_ball_direction = self.Monotonic(x_tmp[:2][::-1], strictly=False, half=False)
             if self.is_real_time_speed:
-                self.real_time_ball_direction = self.Monotonic(x_tmp[:3][::-1], strictly=False, half=False)
+                self.real_time_ball_direction = self.Monotonic(x_tmp[:2][::-1], strictly=False, half=False)
 
         ## 有偵測到球體
         if self.x_c_pred != None and self.y_c_pred != None:
@@ -1084,28 +1089,28 @@ class Trajectory:
                 )
 
         # 將球的方向判斷出來
-        if self.ball_direction == "right":  # Direction right
-            cv2.putText(
-                image_CV,
-                "right",
-                (240, 100),
-                cv2.FONT_HERSHEY_TRIPLEX,
-                1,
-                (0, 255, 255),
-                1,
-                cv2.LINE_AA,
-            )
-        elif self.ball_direction == "left":  # Direction left
-            cv2.putText(
-                image_CV,
-                "left",
-                (240, 100),
-                cv2.FONT_HERSHEY_TRIPLEX,
-                1,
-                (0, 255, 255),
-                1,
-                cv2.LINE_AA,
-            )
+        # if self.show_ball_direction == "right":  # Direction right
+        #     cv2.putText(
+        #         image_CV,
+        #         "right",
+        #         (240, 100),
+        #         cv2.FONT_HERSHEY_TRIPLEX,
+        #         1,
+        #         (0, 255, 255),
+        #         1,
+        #         cv2.LINE_AA,
+        #     )
+        # elif self.show_ball_direction == "left":  # Direction left
+        #     cv2.putText(
+        #         image_CV,
+        #         "left",
+        #         (240, 100),
+        #         cv2.FONT_HERSHEY_TRIPLEX,
+        #         1,
+        #         (0, 255, 255),
+        #         1,
+        #         cv2.LINE_AA,
+        #     )
 
         # # 標示出球速
         if self.MAX_velo > 113:
@@ -1119,7 +1124,7 @@ class Trajectory:
                 1,
                 cv2.LINE_AA,
             )
-        elif self.ball_direction != "unknown":
+        elif self.show_ball_direction != "unknown":
             cv2.putText(
                 image_CV,
                 "          " + str(self.shotspeed),
@@ -1165,26 +1170,26 @@ class Trajectory:
             cv2.LINE_AA,
         )
 
-        cv2.putText(
-            image_CV,
-            "Direction :",
-            (10, 100),
-            cv2.FONT_HERSHEY_TRIPLEX,
-            1,
-            (0, 255, 255),
-            1,
-            cv2.LINE_AA,
-        )
-        cv2.putText(
-            image_CV,
-            f"Frame : {self.count}",
-            (10, 160),
-            cv2.FONT_HERSHEY_TRIPLEX,
-            1,
-            (0, 255, 255),
-            1,
-            cv2.LINE_AA,
-        )
+        # cv2.putText(
+        #     image_CV,
+        #     "Direction :",
+        #     (10, 100),
+        #     cv2.FONT_HERSHEY_TRIPLEX,
+        #     1,
+        #     (0, 255, 255),
+        #     1,
+        #     cv2.LINE_AA,
+        # )
+        # cv2.putText(
+        #     image_CV,
+        #     f"Frame : {self.count}",
+        #     (10, 160),
+        #     cv2.FONT_HERSHEY_TRIPLEX,
+        #     1,
+        #     (0, 255, 255),
+        #     1,
+        #     cv2.LINE_AA,
+        # )
 
         # 右下角顯示
         image_CV_height, image_CV_width, _ = image_CV.shape
@@ -1255,8 +1260,8 @@ class Trajectory:
         self.WIDTH = 512
 
         # 影片跟目錄
-        root_path = f"./runs/detect/105_03_20250430"
-        video_fullname = "105_03.mp4"
+        root_path = f"./runs/detect/105_01_20250430"
+        video_fullname = "105_01.mp4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
         self.input_path = os.path.join(root_path, video_fullname)
@@ -1351,6 +1356,7 @@ class Trajectory:
             self.video_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
         self.ball_direction = "unknown"  # 球當下的方向(給拋物線用)
+        self.show_ball_direction = "unknown"  # 球當下的方向(給顯示用的)
         self.is_real_time_speed = True  # 使否即時顯示球速
         if self.is_real_time_speed:
             self.past_c_frame_number = 1  # 上一次取得球的frame
@@ -1364,8 +1370,11 @@ class Trajectory:
             self.save_queue_threadhold_by_switch_ball_direction = 120  # 多少個frame沒有變換方向則儲存
             self.save_queue_minimum_frame_size = 10  # 至少有多少個frame才儲存影片
             self.control_queue = mp.Queue()  # 儲存影片
+            self.real_time_speed_root_path = f"{self.video_path}/{self.video_name}"
+            os.makedirs(self.real_time_speed_root_path, exist_ok=True)
             self.real_time_speed_process = mp.Process(
-                target=self.Real_Time_Speed_Process, args=(self.control_queue, self.save_queue_minimum_frame_size)
+                target=self.Real_Time_Speed_Process,
+                args=(self.real_time_speed_root_path, self.control_queue, self.save_queue_minimum_frame_size),
             )
             self.real_time_speed_process.start()
 
