@@ -9,6 +9,7 @@ import re
 import sys
 import time
 from collections import defaultdict, deque
+from enum import Enum, auto
 from pathlib import Path
 
 import cv2
@@ -18,6 +19,18 @@ import numpy.linalg as LA
 import pandas as pd
 from scipy.optimize import leastsq
 from tqdm import tqdm
+
+
+class Direction(Enum):
+    right = auto()
+    left = auto()
+    unknown = auto()
+
+
+class Tag(Enum):
+    frame = auto()
+    save = auto()
+    exit = auto()
 
 
 class Trajectory:
@@ -112,17 +125,17 @@ class Trajectory:
 
             # 回傳結果
             if half_strictly_increasing:
-                return "right"
+                return Direction.right.name
             elif half_strictly_decreasing:
-                return "left"
+                return Direction.left.name
             else:
                 if return_unknown:
-                    return "unknown"
+                    return Direction.unknown.name
                 else:
                     if total_increasing > total_decreasing:
-                        return "right"
+                        return Direction.right.name
                     else:
-                        return "left"
+                        return Direction.left.name
         else:
             if strictly:
                 strictly_increasing = np.all(L[1:] > L[:-1])
@@ -131,17 +144,17 @@ class Trajectory:
                 dec_count = np.sum(L[1:] < L[:-1])
                 # 回傳結果
                 if strictly_increasing:
-                    return "right"
+                    return Direction.right.name
                 elif strictly_decreasing:
-                    return "left"
+                    return Direction.left.name
                 else:
                     if return_unknown:
-                        return "unknown"
+                        return Direction.unknown.name
                     else:
                         if inc_count > dec_count:
-                            return "right"
+                            return Direction.right.name
                         else:
-                            return "left"
+                            return Direction.left.name
             else:
                 non_strictly_increasing = np.all(L[1:] >= L[:-1])
                 non_strictly_decreasing = np.all(L[1:] <= L[:-1])
@@ -149,17 +162,17 @@ class Trajectory:
                 dec_count = np.sum(L[1:] <= L[:-1])
                 # 回傳結果
                 if non_strictly_increasing:
-                    return "right"
+                    return Direction.right.name
                 elif non_strictly_decreasing:
-                    return "left"
+                    return Direction.left.name
                 else:
                     if return_unknown:
-                        return "unknown"
+                        return Direction.unknown.name
                     else:
                         if inc_count > dec_count:
-                            return "right"
+                            return Direction.right.name
                         else:
-                            return "left"
+                            return Direction.left.name
 
     def Euclidean_Distance(self, x, y, x1, y1):
         # 計算歐式距離
@@ -219,14 +232,14 @@ class Trajectory:
         else:
             # score / side_min+(side_max- side_min)
             normalize_score = int(np.round((score) * (255 / (side_max)), 0))
-        if side == "left":
+        if side == Direction.left.name:
             color = (
                 gray_level_max - normalize_score,
                 gray_level_max - normalize_score,
                 255,
             )  # (0,0,255)
             return color
-        elif side == "right":
+        elif side == Direction.right.name:
             color = (
                 gray_level_max - normalize_score,
                 255,
@@ -273,12 +286,12 @@ class Trajectory:
                     if i < 2:
                         # left
                         color_detect = self.Detect_Color_Level(
-                            score_table[i][j], "left", left_score_min, left_score_max
+                            score_table[i][j], Direction.left.name, left_score_min, left_score_max
                         )
                     else:
                         # right
                         color_detect = self.Detect_Color_Level(
-                            score_table[i][j], "right", right_score_min, right_score_max
+                            score_table[i][j], Direction.right.name, right_score_min, right_score_max
                         )
                     text = str(score_table[i][j]) + "%"
                     cv2.rectangle(
@@ -370,7 +383,12 @@ class Trajectory:
         plt.clf()
 
         plt.figure(figsize=(15, 10), dpi=100, linewidth=2)
-        plt.hist([self.left_speed_list, self.right_speed_list], bins="auto", alpha=1, label=["left", "right"])
+        plt.hist(
+            [self.left_speed_list, self.right_speed_list],
+            bins="auto",
+            alpha=1,
+            label=[Direction.left.name, Direction.right.name],
+        )
 
         plt.xlabel(f"m/s", fontsize=30, labelpad=15)
         plt.ylabel(f"shots", fontsize=30, labelpad=20)
@@ -685,7 +703,6 @@ class Trajectory:
 
     def Generate_Real_Time_Speed_index(self):
         if self.real_time_ball_direction != self.real_time_past_ball_direction:
-            self.last_frame_switch_ball_direction = self.count
             self.real_time_speed_index_last += 1
         return self.real_time_speed_index_last
 
@@ -695,32 +712,24 @@ class Trajectory:
         else:
             self.delay_frame_queue.appendleft(image_CV_real_time_speed)
             image_CV_real_time_speed = self.delay_frame_queue.pop()
-            self.Control_Queue("frame", real_time_speed_index_last, image_CV_real_time_speed)
+            self.Control_Queue(Tag.frame.name, real_time_speed_index_last, image_CV_real_time_speed)
 
     def Control_Queue(self, tag, index, image_CV):
-        if tag != "frame" and tag != "save" and tag != "exit":
-            raise Exception("unknow tag")
         self.control_queue.put((tag, index, image_CV))
 
     def Raise_Save_Queue(self):
         for index in range(self.real_time_speed_index_head, self.real_time_speed_index_last):
-            self.Control_Queue("save", index, None)
+            self.Control_Queue(Tag.save.name, index, None)
         self.real_time_speed_index_head = self.real_time_speed_index_last
-
-    def Is_Save_Queue(self):
-        if self.count - self.last_frame_switch_ball_direction > self.save_queue_threadhold_by_switch_ball_direction:
-            return True
-        else:
-            return False
 
     def Exit_Save_Queue(self):
         while self.delay_frame_queue:
             image_CV_real_time_speed = self.delay_frame_queue.pop()
-            self.Control_Queue("frame", self.real_time_speed_index_last, image_CV_real_time_speed)
+            self.Control_Queue(Tag.frame.name, self.real_time_speed_index_last, image_CV_real_time_speed)
         for index in range(self.real_time_speed_index_head, self.real_time_speed_index_last + 1):
-            self.Control_Queue("save", index, None)
+            self.Control_Queue(Tag.save.name, index, None)
         for index in range(self.real_time_speed_index_head, self.real_time_speed_index_last + 1):
-            self.Control_Queue("exit", index, None)
+            self.Control_Queue(Tag.exit.name, index, None)
         self.real_time_speed_process.join()
 
     def Real_Time_Speed_Process(self, root_path, control_queue, save_queue_minimum_frame_size):
@@ -730,13 +739,13 @@ class Trajectory:
         while True:
             if not control_queue.empty():
                 tag, index, image_CV = control_queue.get()
-                if tag == "frame":
+                if tag == Tag.frame.name:
                     buffers[index].append(image_CV)
                     if real_time_speed_index_last != index:
                         real_time_speed_index_last = index
                         real_time_speed_pbar.total = real_time_speed_index_last
                         real_time_speed_pbar.refresh()
-                elif tag == "save":
+                elif tag == Tag.save.name:
                     if index in buffers:
                         if buffers[index]:
                             image_CVs = buffers[index]
@@ -755,7 +764,7 @@ class Trajectory:
                                 out.release()
                         buffers.pop(index, None)
                     real_time_speed_pbar.update()
-                elif tag == "exit":
+                elif tag == Tag.exit.name:
                     real_time_speed_pbar.close()
                     break
             time.sleep(0.01)
@@ -832,7 +841,7 @@ class Trajectory:
         # 累積有三顆球的軌跡且同一方向, 可計算拋物線
         if self.is_real_time_speed:
             self.real_time_past_ball_direction = self.real_time_ball_direction
-        self.ball_direction, self.real_time_ball_direction = "unknown", "unknown"
+        self.ball_direction, self.real_time_ball_direction = Direction.unknown.name, Direction.unknown.name
         if len(x_tmp) >= 3:
             # 檢查是否嚴格遞增或嚴格遞減,(軌跡方向是否相同) x_tmp是左邊新右邊舊，所以要相反
             if self.is_first_ball:
@@ -851,7 +860,7 @@ class Trajectory:
         ## 有偵測到球體
         if self.x_c_pred != None and self.y_c_pred != None:
             ## 落點預測 ######################################################################################################
-            if self.ball_direction == "right" or self.ball_direction == "left":
+            if self.ball_direction == Direction.right.name or self.ball_direction == Direction.left.name:
                 parabola = self.Solve_Parabola(x_tmp, y_tmp)
                 a, b, c = parabola[0]
                 fit = a * self.x_c_pred**2 + b * self.x_c_pred + c
@@ -884,7 +893,7 @@ class Trajectory:
                             self.is_serve_wait = False
                             self.bounce_frame_L, self.bounce_frame_R = -1, -1
                             self.hit_count = 0
-                            print(f"<---Frame : {self.count}, round end.--->")
+                            # print(f"<---Frame : {self.count}, round end.--->")
                             self.img_opt = self.Draw_MiniBoard()
                         # 落點在左側
                         if self.PT_dict[self.count][0] <= int(self.miniboard_width / 2) + self.miniboard_edge:
@@ -940,7 +949,7 @@ class Trajectory:
 
                                     self.shotspeed = self.speed_right
                                     self.shotspeed_previous = self.speed_right
-                                    print(f"Frame : {self.count} self.speed_right : {self.speed_right} ")
+                                    # print(f"Frame : {self.count} self.speed_right : {self.speed_right} ")
                                     self.right_speed_list.append(self.speed_right)
                                     if self.is_show_speed_analysis:
                                         self.Draw_SpeedHist(save=False, show=self.is_show_speed_analysis)
@@ -954,11 +963,11 @@ class Trajectory:
                                 )
                             # 其他
                             elif (self.count - self.bounce_frame_L) > 60:
-                                print("[------------------------------------------------------------]")
-                                print(
-                                    f"sth wrong at frame : {self.count}, bounce_R : {self.bounce_frame_R}, self.hit_count : {self.hit_count}"
-                                )
-                                print("[------------------------------------------------------------]")
+                                # print("[------------------------------------------------------------]")
+                                # print(
+                                #     f"sth wrong at frame : {self.count}, bounce_R : {self.bounce_frame_R}, self.hit_count : {self.hit_count}"
+                                # )
+                                # print("[------------------------------------------------------------]")
                                 self.is_first_ball = False
                                 self.is_serve_wait = True
                                 self.now_player = 1
@@ -1022,7 +1031,7 @@ class Trajectory:
 
                                     self.shotspeed = self.speed_left
                                     self.shotspeed_previous = self.speed_left
-                                    print(f"Frame : {self.count} self.speed_left : {self.speed_left} ")
+                                    # print(f"Frame : {self.count} self.speed_left : {self.speed_left} ")
                                     self.left_speed_list.append(self.speed_left)
                                     if self.is_show_speed_analysis:
                                         self.Draw_SpeedHist(save=False, show=self.is_show_speed_analysis)
@@ -1037,11 +1046,11 @@ class Trajectory:
 
                             # 其他
                             elif (self.count - self.bounce_frame_R) > 60:
-                                print("[------------------------------------------------------------]")
-                                print(
-                                    f"sth wrong at frame : {self.count}, bounce_L : {self.bounce_frame_L}, self.hit_count : {self.hit_count}"
-                                )
-                                print("[------------------------------------------------------------]")
+                                # print("[------------------------------------------------------------]")
+                                # print(
+                                #     f"sth wrong at frame : {self.count}, bounce_L : {self.bounce_frame_L}, self.hit_count : {self.hit_count}"
+                                # )
+                                # print("[------------------------------------------------------------]")
                                 self.is_first_ball = False
                                 self.is_serve_wait = True
                                 self.now_player = 0
@@ -1132,10 +1141,10 @@ class Trajectory:
                 )
 
         # 將球的方向判斷出來
-        # if self.show_ball_direction == "right":  # Direction right
+        # if self.show_ball_direction == Direction.right.name:  # Direction right
         #     cv2.putText(
         #         image_CV,
-        #         "right",
+        #         Direction.right.name,
         #         (240, 100),
         #         cv2.FONT_HERSHEY_TRIPLEX,
         #         1,
@@ -1143,10 +1152,10 @@ class Trajectory:
         #         1,
         #         cv2.LINE_AA,
         #     )
-        # elif self.show_ball_direction == "left":  # Direction left
+        # elif self.show_ball_direction == Direction.left.name:  # Direction left
         #     cv2.putText(
         #         image_CV,
-        #         "left",
+        #         Direction.left.name,
         #         (240, 100),
         #         cv2.FONT_HERSHEY_TRIPLEX,
         #         1,
@@ -1167,7 +1176,7 @@ class Trajectory:
                 1,
                 cv2.LINE_AA,
             )
-        elif self.show_ball_direction != "unknown":
+        elif self.show_ball_direction != Direction.unknown.name:
             cv2.putText(
                 image_CV,
                 "          " + str(self.shotspeed),
@@ -1398,20 +1407,18 @@ class Trajectory:
                 self.Draw_SpeedHist(save=False, show=self.is_show_speed_analysis)
             self.video_name = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-        self.ball_direction = "unknown"  # 球當下的方向(給拋物線用)
-        self.show_ball_direction = "unknown"  # 球當下的方向(給顯示用的)
+        self.ball_direction = Direction.unknown.name  # 球當下的方向(給拋物線用)
+        self.show_ball_direction = Direction.unknown.name  # 球當下的方向(給顯示用的)
         self.is_real_time_speed = True  # 使否即時顯示球速
         if self.is_real_time_speed:
             self.past_c_frame_number = 1  # 上一次取得球的frame
-            self.real_time_ball_direction = "unknown"  # 球當下的方向(給realtime speed)
-            self.real_time_past_ball_direction = "unknown"  # 上一次球的方向(給realtime speed)
+            self.real_time_ball_direction = Direction.unknown.name  # 球當下的方向(給realtime speed)
+            self.real_time_past_ball_direction = Direction.unknown.name  # 上一次球的方向(給realtime speed)
             self.real_time_ball_direction_reference_frame_size = 8  # 參考多少個frame決定方向
             self.real_time_speed = None  # 及時球速
             self.real_time_speed_index_head = 0  # 擷取影像的分段標籤(頭)
             self.real_time_speed_index_last = 0  # 擷取影像的分段標籤(尾)
             self.real_time_speed_save_tag = False  # 是否可以儲存影片
-            self.last_frame_switch_ball_direction = 1  # 最後變換方向的frame
-            self.save_queue_threadhold_by_switch_ball_direction = 120  # 多少個frame沒有變換方向則儲存
             self.save_queue_minimum_frame_size = 10  # 至少有多少個frame才儲存影片
             self.delay_frame_queue = deque()  # 因為方向在後real_time_ball_direction_reference_frame_size個frame才能決定
             self.control_queue = mp.Queue()  # 儲存影片
@@ -1463,9 +1470,7 @@ class Trajectory:
             if self.is_real_time_speed:
                 real_time_speed_index_last = self.Generate_Real_Time_Speed_index()
                 self.Add_Frame_In_Delay_Queue(real_time_speed_index_last, image_CV_real_time_speed)
-                is_save_real_time_speed = self.Is_Save_Queue()
-                if is_save_real_time_speed:
-                    self.Raise_Save_Queue()
+                self.Raise_Save_Queue()
 
             self.Next_Count()
             if self.count >= total_frames - 12:

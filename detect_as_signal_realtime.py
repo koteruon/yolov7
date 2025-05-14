@@ -337,10 +337,8 @@ class YoloV7:
                     image_CV, image_CV_real_time_speed = trajectory.Draw_On_Image(image_CV)
                     if opt.is_real_time_speed:
                         real_time_speed_index_last = trajectory.Generate_Real_Time_Speed_index()
-                        trajectory.Control_Queue("frame", real_time_speed_index_last, image_CV_real_time_speed)
-                        is_save_real_time_speed = trajectory.Is_Save_Queue()
-                        if is_save_real_time_speed:
-                            trajectory.Raise_Save_Queue()
+                        trajectory.Add_Frame_In_Delay_Queue(real_time_speed_index_last, image_CV_real_time_speed)
+                        trajectory.Raise_Save_Queue()
 
                     trajectory.Next_Count()
                     if view_img:
