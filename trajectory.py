@@ -30,6 +30,7 @@ class Direction(Enum):
 class Tag(Enum):
     frame = auto()
     save = auto()
+    record_slow_motion = auto()
     exit = auto()
 
 
@@ -495,9 +496,10 @@ class Trajectory:
         self.Show_Bounce_Analysis()
         self.Show_Bounce_Location()
         p_inv = self.Perspective_Transform(self.inv, loc_PT)
-        self.bounce.append([self.count, p_inv[0], p_inv[1]])
+        self.bounce[self.count] = (p_inv[0], p_inv[1])
         self.q_bv.appendleft(p_inv)
         self.q_bv.pop()
+        self.is_save_q_bv = True
 
     def Create_Output_Dir(self, output_path, video_name):
         # 建立輸出檔案夾
@@ -707,64 +709,194 @@ class Trajectory:
         return self.real_time_speed_index_last
 
     def Add_Frame_In_Delay_Queue(self, real_time_speed_index_last, image_CV_real_time_speed):
-        if len(self.delay_frame_queue) <= self.real_time_ball_direction_reference_frame_size // 2:
-            self.delay_frame_queue.appendleft(image_CV_real_time_speed)
-        else:
-            self.delay_frame_queue.appendleft(image_CV_real_time_speed)
-            image_CV_real_time_speed = self.delay_frame_queue.pop()
-            self.Control_Queue(Tag.frame.name, real_time_speed_index_last, image_CV_real_time_speed)
+        is_bounce = self.count in self.bounce
+        self.delay_frame_queue.appendleft(
+            (image_CV_real_time_speed, self.real_time_ball_direction, self.real_time_speed, is_bounce)
+        )
+        if len(self.delay_frame_queue) > self.real_time_ball_direction_reference_frame_size // 2:
+            image_CV_real_time_speed, real_time_ball_direction, real_time_speed, is_bounce = (
+                self.delay_frame_queue.pop()
+            )
+            self.Control_Queue(
+                Tag.frame.name,
+                index=real_time_speed_index_last,
+                image_CV=image_CV_real_time_speed,
+                real_time_ball_direction=real_time_ball_direction,
+                real_time_speed=real_time_speed,
+                is_bounce=is_bounce,
+            )
 
-    def Control_Queue(self, tag, index, image_CV):
-        self.control_queue.put((tag, index, image_CV))
+    def Control_Queue(
+        self,
+        tag,
+        index=None,
+        image_CV=None,
+        real_time_ball_direction=None,
+        real_time_speed=None,
+        is_bounce=None,
+        last_bounce_direction=None,
+    ):
+        self.control_queue.put(
+            (tag, index, image_CV, real_time_ball_direction, real_time_speed, is_bounce, last_bounce_direction)
+        )
 
     def Raise_Save_Queue(self):
         for index in range(self.real_time_speed_index_head, self.real_time_speed_index_last):
-            self.Control_Queue(Tag.save.name, index, None)
+            self.Control_Queue(Tag.save.name, index=index)
         self.real_time_speed_index_head = self.real_time_speed_index_last
 
     def Exit_Save_Queue(self):
         while self.delay_frame_queue:
-            image_CV_real_time_speed = self.delay_frame_queue.pop()
-            self.Control_Queue(Tag.frame.name, self.real_time_speed_index_last, image_CV_real_time_speed)
+            image_CV_real_time_speed, real_time_ball_direction, real_time_speed, is_bounce = (
+                self.delay_frame_queue.pop()
+            )
+            self.Control_Queue(
+                Tag.frame.name,
+                index=self.real_time_speed_index_last,
+                image_CV=image_CV_real_time_speed,
+                real_time_ball_direction=real_time_ball_direction,
+                real_time_speed=real_time_speed,
+                is_bounce=is_bounce,
+            )
         for index in range(self.real_time_speed_index_head, self.real_time_speed_index_last + 1):
-            self.Control_Queue(Tag.save.name, index, None)
+            self.Control_Queue(Tag.save.name, index=index)
         for index in range(self.real_time_speed_index_head, self.real_time_speed_index_last + 1):
-            self.Control_Queue(Tag.exit.name, index, None)
+            self.Control_Queue(Tag.exit.name, index=index)
         self.real_time_speed_process.join()
 
-    def Real_Time_Speed_Process(self, root_path, control_queue, save_queue_minimum_frame_size):
+    def Real_Time_Speed_Process(self, root_path, control_queue, is_record_slow_motion):
         real_time_speed_pbar = tqdm(total=0)  # 擷取影像的分段標籤進度條
         real_time_speed_index_last = 0  # 擷取影像的分段標籤(尾)
-        buffers = defaultdict(list)
+        save_queue_minimum_frame_size = 15  # 至少有多少個frame才儲存影片
+        calculate_speed_top_k = 5  # 計算5個最高的速度取平均值
+
+        frame_buffers = defaultdict(list)  # 儲存frame的dict
+        speed_buffers = defaultdict(list)  # 儲存speed的dict
+        bounce_buffers = defaultdict(bool)  # 儲存bounce的dict
+        direction_buffers = defaultdict(lambda: Direction.unknown.name)  # 儲存direction的dict
+
+        if is_record_slow_motion:
+            max_slow_motion_size = 3  # 最多有機個慢動作組合
+            min_speed_slow_motion = 3.0  # 平均最高球速最低限速
+            left_last_slow_motion_frame = []
+            right_last_slow_motion_frame = []
+            left_slow_motion_buffers = []
+            right_slow_motion_buffers = []
+
         while True:
             if not control_queue.empty():
-                tag, index, image_CV = control_queue.get()
+                tag, index, image_CV, real_time_ball_direction, real_time_speed, is_bounce, last_bounce_direction = (
+                    control_queue.get()
+                )
                 if tag == Tag.frame.name:
-                    buffers[index].append(image_CV)
+                    frame_buffers[index].append(image_CV)
+                    direction_buffers[index] = real_time_ball_direction
+                    if real_time_speed:
+                        speed_buffers[index].append(real_time_speed)
+                    if is_bounce:
+                        bounce_buffers[index] = is_bounce
                     if real_time_speed_index_last != index:
                         real_time_speed_index_last = index
                         real_time_speed_pbar.total = real_time_speed_index_last
                         real_time_speed_pbar.refresh()
                 elif tag == Tag.save.name:
-                    if index in buffers:
-                        if buffers[index]:
-                            image_CVs = buffers[index]
-                            image_CVs_size = len(image_CVs)
-                            if save_queue_minimum_frame_size < image_CVs_size:
-                                height, width, _ = image_CVs[0].shape
-                                video_path = os.path.join(root_path, f"{index:03d}_{image_CVs_size}.mp4")
-                                out = cv2.VideoWriter(
-                                    video_path,
-                                    cv2.VideoWriter_fourcc(*"mp4v"),
-                                    5,
-                                    (width, height),
-                                )
-                                for f in image_CVs:
-                                    out.write(f)
-                                out.release()
-                        buffers.pop(index, None)
+                    if index in frame_buffers:
+                        image_CVs = frame_buffers[index]
+                        image_CVs_size = len(image_CVs)
+                        if save_queue_minimum_frame_size < image_CVs_size:
+                            # 另存成影片
+                            height, width, _ = image_CVs[0].shape
+                            video_path = os.path.join(root_path, f"{index:03d}_{image_CVs_size}.mp4")
+                            out = cv2.VideoWriter(
+                                video_path,
+                                cv2.VideoWriter_fourcc(*"mp4v"),
+                                5,
+                                (width, height),
+                            )
+                            for f in image_CVs:
+                                out.write(f)
+                            out.release()
+
+                            # 有落點的
+                            if is_record_slow_motion and bounce_buffers[index]:
+                                # 計算最大平均球速
+                                real_time_speeds = np.array(speed_buffers[index])
+                                real_time_speeds = real_time_speeds[~np.isnan(real_time_speeds)]
+                                real_time_speeds = real_time_speeds[np.isfinite(real_time_speeds)]
+                                q1 = np.percentile(real_time_speeds, 25)
+                                q3 = np.percentile(real_time_speeds, 75)
+                                iqr = q3 - q1
+                                lower_bound = q1 - 1.5 * iqr
+                                upper_bound = q3 + 1.5 * iqr
+                                real_time_speeds_filtered = real_time_speeds[
+                                    (real_time_speeds >= lower_bound) & (real_time_speeds <= upper_bound)
+                                ]
+                                k = min(calculate_speed_top_k, len(real_time_speeds_filtered))
+                                top_k = np.sort(real_time_speeds_filtered)[-k:][::-1]
+                                top_k_average = top_k.mean()
+
+                                # 紀錄slow motion
+                                if direction_buffers[index] == Direction.left.name:
+                                    if min_speed_slow_motion < top_k_average:
+                                        left_last_slow_motion_frame = [top_k_average, image_CVs]
+                                elif direction_buffers[index] == Direction.right.name:
+                                    if min_speed_slow_motion < top_k_average:
+                                        right_last_slow_motion_frame = [top_k_average, image_CVs]
+
+                        frame_buffers.pop(index, None)
                     real_time_speed_pbar.update()
+                elif tag == Tag.record_slow_motion.name:
+                    if is_record_slow_motion:
+                        if last_bounce_direction == Direction.left.name:
+                            if left_last_slow_motion_frame:
+                                left_slow_motion_buffers.append(left_last_slow_motion_frame)
+                                if len(left_slow_motion_buffers) > max_slow_motion_size:
+                                    min_index = min(
+                                        range(len(left_slow_motion_buffers)),
+                                        key=lambda i: left_slow_motion_buffers[i][0],
+                                    )
+                                    left_slow_motion_buffers.pop(min_index)
+                        elif last_bounce_direction == Direction.right.name:
+                            if right_last_slow_motion_frame:
+                                right_slow_motion_buffers.append(right_last_slow_motion_frame)
+                                if len(right_slow_motion_buffers) > max_slow_motion_size:
+                                    min_index = min(
+                                        range(len(right_slow_motion_buffers)),
+                                        key=lambda i: right_slow_motion_buffers[i][0],
+                                    )
+                                    right_slow_motion_buffers.pop(min_index)
+                        left_last_slow_motion_frame = []
+                        right_last_slow_motion_frame = []
                 elif tag == Tag.exit.name:
+                    if is_record_slow_motion:
+                        left_slow_motion_frames = [img for _, imgs in left_slow_motion_buffers for img in imgs]
+                        if left_slow_motion_frames:
+                            height, width, _ = left_slow_motion_frames[0].shape
+                            video_path = os.path.join(root_path, f"left_slow_motion.mp4")
+                            out = cv2.VideoWriter(
+                                video_path,
+                                cv2.VideoWriter_fourcc(*"mp4v"),
+                                5,
+                                (width, height),
+                            )
+                            for f in left_slow_motion_frames:
+                                out.write(f)
+                            out.release()
+
+                        right_slow_motion_frames = [img for _, imgs in right_slow_motion_buffers for img in imgs]
+                        if right_slow_motion_frames:
+                            height, width, _ = right_slow_motion_frames[0].shape
+                            video_path = os.path.join(root_path, f"right_slow_motion.mp4")
+                            out = cv2.VideoWriter(
+                                video_path,
+                                cv2.VideoWriter_fourcc(*"mp4v"),
+                                5,
+                                (width, height),
+                            )
+                            for f in right_slow_motion_frames:
+                                out.write(f)
+                            out.release()
+
                     real_time_speed_pbar.close()
                     break
             time.sleep(0.01)
@@ -890,6 +1022,15 @@ class Trajectory:
                         2. 停留在桌上 (被網子攔住)
                         """
                         if len(restart_list) >= 2 and (int(restart_list[-1]) - int(restart_list[-2])) > 200:
+                            if self.is_record_slow_motion:
+                                if self.now_player == 0:
+                                    self.Control_Queue(
+                                        Tag.record_slow_motion.name, last_bounce_direction=Direction.right.name
+                                    )
+                                else:
+                                    self.Control_Queue(
+                                        Tag.record_slow_motion.name, last_bounce_direction=Direction.left.name
+                                    )
                             self.is_serve_wait = False
                             self.bounce_frame_L, self.bounce_frame_R = -1, -1
                             self.hit_count = 0
@@ -1064,6 +1205,14 @@ class Trajectory:
 
             ## 超過一秒都沒有球落在球桌上
             if (self.count - self.bounce_frame_L) >= 60 and (self.count - self.bounce_frame_R) >= 60:  # 超過1秒
+                # 落點在右邊，方向向右
+                if self.is_record_slow_motion:
+                    if not self.is_first_ball:
+                        if self.now_player == 0:
+                            self.Control_Queue(Tag.record_slow_motion.name, last_bounce_direction=Direction.right.name)
+                        else:
+                            self.Control_Queue(Tag.record_slow_motion.name, last_bounce_direction=Direction.left.name)
+
                 self.is_first_ball = True
                 self.is_serve_wait = True
                 self.bounce_frame_L, self.bounce_frame_R = -1, -1
@@ -1077,8 +1226,11 @@ class Trajectory:
         )
         self.q.pop()
 
-        self.q_bv.appendleft((-1, -1))
-        self.q_bv.pop()
+        if not self.is_save_q_bv:
+            self.q_bv.appendleft((-1, -1))
+            self.q_bv.pop()
+        else:
+            self.is_save_q_bv = False
 
     def Detect_Ball_Direction(self):
         ball_direction, ball_direction_last = None, None
@@ -1312,8 +1464,8 @@ class Trajectory:
         self.WIDTH = 512
 
         # 影片跟目錄
-        root_path = f"./runs/detect/105_match_01_20250514"
-        video_fullname = "105_match_01.mp4"
+        root_path = f"./runs/detect/105_match_04_20250514"
+        video_fullname = "105_match_04.mp4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
         self.input_path = os.path.join(root_path, video_fullname)
@@ -1355,10 +1507,11 @@ class Trajectory:
         self.q = queue.deque([(-1, -1) for _ in range(12)])
 
         # bounce detection init
+        self.is_save_q_bv = False
         self.q_bv = queue.deque([(-1, -1) for _ in range(6)])
 
         # 參數
-        self.bounce = []
+        self.bounce = {}
         self.left_speed_list, self.right_speed_list = [], []
         self.bounce_location_list = np.zeros((4, 3), dtype=int)
         self.bouncing_offset_x, self.bouncing_offset_y = 10, 15  # bouncing location offset
@@ -1419,14 +1572,14 @@ class Trajectory:
             self.real_time_speed_index_head = 0  # 擷取影像的分段標籤(頭)
             self.real_time_speed_index_last = 0  # 擷取影像的分段標籤(尾)
             self.real_time_speed_save_tag = False  # 是否可以儲存影片
-            self.save_queue_minimum_frame_size = 10  # 至少有多少個frame才儲存影片
+            self.is_record_slow_motion = True  # 是否使用統整所有slow_motion影片
             self.delay_frame_queue = deque()  # 因為方向在後real_time_ball_direction_reference_frame_size個frame才能決定
             self.control_queue = mp.Queue()  # 儲存影片
             self.real_time_speed_root_path = f"{self.video_path}/{self.video_name}"
             os.makedirs(self.real_time_speed_root_path, exist_ok=True)
             self.real_time_speed_process = mp.Process(
                 target=self.Real_Time_Speed_Process,
-                args=(self.real_time_speed_root_path, self.control_queue, self.save_queue_minimum_frame_size),
+                args=(self.real_time_speed_root_path, self.control_queue, self.is_record_slow_motion),
             )
             self.real_time_speed_process.start()
 
