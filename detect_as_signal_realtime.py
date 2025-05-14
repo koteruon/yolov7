@@ -350,9 +350,9 @@ class YoloV7:
                         cv2.imshow("Realtime Trajectory", im0)
 
                 # Print time (inference + NMS)
-                print(
-                    f"{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS, ({(1E3 * (time_synchronized() - t4)):.1f}ms) Total time, ({1.0 / (time_synchronized() - t4):.1f}) FPS"
-                )
+                # print(
+                #     f"{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS, ({(1E3 * (time_synchronized() - t4)):.1f}ms) Total time, ({1.0 / (time_synchronized() - t4):.1f}) FPS"
+                # )
 
                 t4 = time_synchronized()
 

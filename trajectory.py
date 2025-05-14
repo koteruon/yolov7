@@ -8,7 +8,7 @@ import queue
 import re
 import sys
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from pathlib import Path
 
 import cv2
@@ -57,7 +57,7 @@ class Trajectory:
         cts = "{:02d}:{:02d}:{:02d}.{:03d}".format(hours, minutes, seconds, milliseconds)
         return cts
 
-    def Monotonic(self, L, strictly=False, half=False):
+    def Monotonic(self, L, strictly=False, half=False, return_unknown=True):
         # 檢查單調函數(嚴格遞增或遞減)
         if half:
             if strictly:
@@ -83,6 +83,7 @@ class Trajectory:
                     half_strictly_increasing = False
             else:
                 half_strictly_increasing = False
+            total_increasing = np.sum(subsequence_lengths)
 
             if strictly:
                 # 找出所有遞減子序列的起始索引
@@ -107,6 +108,7 @@ class Trajectory:
                     half_strictly_decreasing = False
             else:
                 half_strictly_decreasing = False
+            total_decreasing = np.sum(subsequence_lengths)
 
             # 回傳結果
             if half_strictly_increasing:
@@ -114,28 +116,50 @@ class Trajectory:
             elif half_strictly_decreasing:
                 return "left"
             else:
-                return "unknown"
+                if return_unknown:
+                    return "unknown"
+                else:
+                    if total_increasing > total_decreasing:
+                        return "right"
+                    else:
+                        return "left"
         else:
             if strictly:
                 strictly_increasing = np.all(L[1:] > L[:-1])
                 strictly_decreasing = np.all(L[1:] < L[:-1])
+                inc_count = np.sum(L[1:] > L[:-1])
+                dec_count = np.sum(L[1:] < L[:-1])
                 # 回傳結果
                 if strictly_increasing:
                     return "right"
                 elif strictly_decreasing:
                     return "left"
                 else:
-                    return "unknown"
+                    if return_unknown:
+                        return "unknown"
+                    else:
+                        if inc_count > dec_count:
+                            return "right"
+                        else:
+                            return "left"
             else:
                 non_strictly_increasing = np.all(L[1:] >= L[:-1])
                 non_strictly_decreasing = np.all(L[1:] <= L[:-1])
+                inc_count = np.sum(L[1:] >= L[:-1])
+                dec_count = np.sum(L[1:] <= L[:-1])
                 # 回傳結果
                 if non_strictly_increasing:
                     return "right"
                 elif non_strictly_decreasing:
                     return "left"
                 else:
-                    return "unknown"
+                    if return_unknown:
+                        return "unknown"
+                    else:
+                        if inc_count > dec_count:
+                            return "right"
+                        else:
+                            return "left"
 
     def Euclidean_Distance(self, x, y, x1, y1):
         # 計算歐式距離
@@ -660,14 +684,18 @@ class Trajectory:
         return delta_m * self.framerate / frame_diff
 
     def Generate_Real_Time_Speed_index(self):
-        if self.real_time_past_ball_direction == "unknown" and self.real_time_ball_direction == "right":
-            return
-        if self.real_time_past_ball_direction == "unknown" and self.real_time_ball_direction == "left":
-            return
         if self.real_time_ball_direction != self.real_time_past_ball_direction:
             self.last_frame_switch_ball_direction = self.count
             self.real_time_speed_index_last += 1
         return self.real_time_speed_index_last
+
+    def Add_Frame_In_Delay_Queue(self, real_time_speed_index_last, image_CV_real_time_speed):
+        if len(self.delay_frame_queue) <= self.real_time_ball_direction_reference_frame_size // 2:
+            self.delay_frame_queue.appendleft(image_CV_real_time_speed)
+        else:
+            self.delay_frame_queue.appendleft(image_CV_real_time_speed)
+            image_CV_real_time_speed = self.delay_frame_queue.pop()
+            self.Control_Queue("frame", real_time_speed_index_last, image_CV_real_time_speed)
 
     def Control_Queue(self, tag, index, image_CV):
         if tag != "frame" and tag != "save" and tag != "exit":
@@ -675,9 +703,8 @@ class Trajectory:
         self.control_queue.put((tag, index, image_CV))
 
     def Raise_Save_Queue(self):
-        for index in range(self.real_time_speed_index_head, self.real_time_speed_index_last + 1):
+        for index in range(self.real_time_speed_index_head, self.real_time_speed_index_last):
             self.Control_Queue("save", index, None)
-        self.real_time_speed_index_last = self.real_time_speed_index_last + 1
         self.real_time_speed_index_head = self.real_time_speed_index_last
 
     def Is_Save_Queue(self):
@@ -687,40 +714,49 @@ class Trajectory:
             return False
 
     def Exit_Save_Queue(self):
-        self.Raise_Save_Queue()
+        while self.delay_frame_queue:
+            image_CV_real_time_speed = self.delay_frame_queue.pop()
+            self.Control_Queue("frame", self.real_time_speed_index_last, image_CV_real_time_speed)
+        for index in range(self.real_time_speed_index_head, self.real_time_speed_index_last + 1):
+            self.Control_Queue("save", index, None)
         for index in range(self.real_time_speed_index_head, self.real_time_speed_index_last + 1):
             self.Control_Queue("exit", index, None)
         self.real_time_speed_process.join()
 
     def Real_Time_Speed_Process(self, root_path, control_queue, save_queue_minimum_frame_size):
+        real_time_speed_pbar = tqdm(total=0)  # 擷取影像的分段標籤進度條
+        real_time_speed_index_last = 0  # 擷取影像的分段標籤(尾)
         buffers = defaultdict(list)
-        save_triggered = set()
         while True:
             if not control_queue.empty():
-                cmd, tag, frame = control_queue.get()
-                if cmd == "frame":
-                    if tag not in save_triggered:
-                        buffers[tag].append(frame)
-                elif cmd == "save":
-                    if tag in buffers and buffers[tag]:
-                        frames = buffers[tag]
-                        frames_size = len(frames)
-                        if save_queue_minimum_frame_size < frames_size:
-                            height, width, _ = frames[0].shape
-                            video_path = os.path.join(root_path, f"{tag:03d}_{frames_size}.mp4")
-                            out = cv2.VideoWriter(
-                                video_path,
-                                cv2.VideoWriter_fourcc(*"mp4v"),
-                                5,
-                                (width, height),
-                            )
-                            for f in frames:
-                                out.write(f)
-                            out.release()
-                            print(f"影片 {video_path} 儲存完成")
-                        save_triggered.add(tag)  # 標記為已儲存
-                        buffers[tag].clear()
-                elif cmd == "exit":
+                tag, index, image_CV = control_queue.get()
+                if tag == "frame":
+                    buffers[index].append(image_CV)
+                    if real_time_speed_index_last != index:
+                        real_time_speed_index_last = index
+                        real_time_speed_pbar.total = real_time_speed_index_last
+                        real_time_speed_pbar.refresh()
+                elif tag == "save":
+                    if index in buffers:
+                        if buffers[index]:
+                            image_CVs = buffers[index]
+                            image_CVs_size = len(image_CVs)
+                            if save_queue_minimum_frame_size < image_CVs_size:
+                                height, width, _ = image_CVs[0].shape
+                                video_path = os.path.join(root_path, f"{index:03d}_{image_CVs_size}.mp4")
+                                out = cv2.VideoWriter(
+                                    video_path,
+                                    cv2.VideoWriter_fourcc(*"mp4v"),
+                                    5,
+                                    (width, height),
+                                )
+                                for f in image_CVs:
+                                    out.write(f)
+                                out.release()
+                        buffers.pop(index, None)
+                    real_time_speed_pbar.update()
+                elif tag == "exit":
+                    real_time_speed_pbar.close()
                     break
             time.sleep(0.01)
 
@@ -783,9 +819,8 @@ class Trajectory:
             self.real_time_speed = self.Estimate_Ball_Speed_kmh()
 
         # 計算方向
-        balls = 5 if self.is_first_ball else 9
         q_array = np.array(self.q)
-        non_negatives_idx = np.where(np.all(q_array != (-1, -1), axis=1))[0][:balls]
+        non_negatives_idx = np.all(q_array != (-1, -1), axis=1)
         q_array = q_array[non_negatives_idx]
         if q_array.size == 0:
             x_tmp = np.array([])
@@ -800,10 +835,18 @@ class Trajectory:
         self.ball_direction, self.real_time_ball_direction = "unknown", "unknown"
         if len(x_tmp) >= 3:
             # 檢查是否嚴格遞增或嚴格遞減,(軌跡方向是否相同) x_tmp是左邊新右邊舊，所以要相反
-            self.ball_direction = self.Monotonic(x_tmp[::-1], strictly=False, half=False)
+            if self.is_first_ball:
+                self.ball_direction = self.Monotonic(x_tmp[:4][::-1], strictly=False, half=False)
+            else:
+                self.ball_direction = self.Monotonic(x_tmp[:8][::-1], strictly=False, half=False)
             self.show_ball_direction = self.Monotonic(x_tmp[:2][::-1], strictly=False, half=False)
             if self.is_real_time_speed:
-                self.real_time_ball_direction = self.Monotonic(x_tmp[:2][::-1], strictly=False, half=False)
+                self.real_time_ball_direction = self.Monotonic(
+                    x_tmp[: self.real_time_ball_direction_reference_frame_size][::-1],
+                    strictly=False,
+                    half=False,
+                    return_unknown=False,
+                )
 
         ## 有偵測到球體
         if self.x_c_pred != None and self.y_c_pred != None:
@@ -1260,8 +1303,8 @@ class Trajectory:
         self.WIDTH = 512
 
         # 影片跟目錄
-        root_path = f"./runs/detect/105_01_20250430"
-        video_fullname = "105_01.mp4"
+        root_path = f"./runs/detect/105_match_01_20250514"
+        video_fullname = "105_match_01.mp4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
         self.input_path = os.path.join(root_path, video_fullname)
@@ -1362,6 +1405,7 @@ class Trajectory:
             self.past_c_frame_number = 1  # 上一次取得球的frame
             self.real_time_ball_direction = "unknown"  # 球當下的方向(給realtime speed)
             self.real_time_past_ball_direction = "unknown"  # 上一次球的方向(給realtime speed)
+            self.real_time_ball_direction_reference_frame_size = 8  # 參考多少個frame決定方向
             self.real_time_speed = None  # 及時球速
             self.real_time_speed_index_head = 0  # 擷取影像的分段標籤(頭)
             self.real_time_speed_index_last = 0  # 擷取影像的分段標籤(尾)
@@ -1369,6 +1413,7 @@ class Trajectory:
             self.last_frame_switch_ball_direction = 1  # 最後變換方向的frame
             self.save_queue_threadhold_by_switch_ball_direction = 120  # 多少個frame沒有變換方向則儲存
             self.save_queue_minimum_frame_size = 10  # 至少有多少個frame才儲存影片
+            self.delay_frame_queue = deque()  # 因為方向在後real_time_ball_direction_reference_frame_size個frame才能決定
             self.control_queue = mp.Queue()  # 儲存影片
             self.real_time_speed_root_path = f"{self.video_path}/{self.video_name}"
             os.makedirs(self.real_time_speed_root_path, exist_ok=True)
@@ -1417,7 +1462,7 @@ class Trajectory:
             image_CV, image_CV_real_time_speed = self.Draw_On_Image(image_CV)
             if self.is_real_time_speed:
                 real_time_speed_index_last = self.Generate_Real_Time_Speed_index()
-                self.Control_Queue("frame", real_time_speed_index_last, image_CV_real_time_speed)
+                self.Add_Frame_In_Delay_Queue(real_time_speed_index_last, image_CV_real_time_speed)
                 is_save_real_time_speed = self.Is_Save_Queue()
                 if is_save_real_time_speed:
                     self.Raise_Save_Queue()
