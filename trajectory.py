@@ -899,7 +899,8 @@ class Trajectory:
 
                     real_time_speed_pbar.close()
                     break
-            time.sleep(0.01)
+            else:
+                time.sleep(0.001)
 
     def Read_Yolo_Label_One_Frame(self, label_file=None, balls=None, x_c_pred=None, y_c_pred=None):
         if x_c_pred != None and y_c_pred != None:
@@ -1004,7 +1005,7 @@ class Trajectory:
                     x_drop = int(round((self.x_c_pred + x_last) / 2, 0))
                     y_drop = int(round(a * x_drop**2 + b * x_drop + c, 0))
                     # 繪製本次球體位置, Golden
-                    cv2.circle(image_CV, (self.x_c_pred, self.y_c_pred), 5, (0, 215, 255), 4)
+                    # cv2.circle(image_CV, (self.x_c_pred, self.y_c_pred), 7, (0, 215, 255), 3)
                     # 透視變形計算本次球體在迷你板上的位置
                     loc_PT = self.Perspective_Transform(self.matrix, (x_drop, y_drop))
                     # 如果變換後落在迷你板內
@@ -1261,12 +1262,12 @@ class Trajectory:
         # draw current frame prediction and previous 11 frames as yellow circle, total: 12 frames
         for i in range(12):
             if self.q[i] != (-1, -1):
-                cv2.circle(image_CV, (self.q[i][0], self.q[i][1]), 5, (0, 255, 255), 1)
+                cv2.circle(image_CV, (self.q[i][0], self.q[i][1]), 7, (0, 165, 255), 2)
 
         # draw bounce point as red circle
         for i in range(6):
             if self.q_bv[i] != (-1, -1):
-                cv2.circle(image_CV, (self.q_bv[i][0], self.q_bv[i][1]), 5, (0, 0, 255), 4)
+                cv2.circle(image_CV, (self.q_bv[i][0], self.q_bv[i][1]), 7, (0, 0, 255), 3)
 
         # Place miniboard on upper right corner
         if self.is_show_bounce:
@@ -1284,11 +1285,11 @@ class Trajectory:
                 cv2.putText(
                     image_CV_real_time_speed,
                     f"{self.real_time_speed:0.1f}(m/s)",
-                    (self.x_ltop_pred, self.y_ltop_pred),
+                    (self.x_ltop_pred + self.x_ltop_pred_offset, self.y_ltop_pred + self.y_ltop_pred_offset),
                     cv2.FONT_HERSHEY_TRIPLEX,
-                    1.0,
+                    1.2,
                     (0, 255, 255),
-                    1,
+                    2,
                     cv2.LINE_AA,
                 )
 
@@ -1464,8 +1465,8 @@ class Trajectory:
         self.WIDTH = 512
 
         # 影片跟目錄
-        root_path = f"./runs/detect/105_match_04_20250514"
-        video_fullname = "105_match_04.mp4"
+        root_path = f"./runs/detect/105_01_20250430"
+        video_fullname = "105_01.mp4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
         self.input_path = os.path.join(root_path, video_fullname)
@@ -1543,7 +1544,7 @@ class Trajectory:
             if self.is_show_bounce_window:
                 self.bounce_title = "Bounce"
                 cv2.namedWindow(self.bounce_title, cv2.WINDOW_NORMAL)
-            self.is_show_bounce_analysis = False
+            self.is_show_bounce_analysis = True
             if self.is_show_bounce_analysis:
                 self.bounce_analysis_title = "Bounce Analysis"
                 cv2.namedWindow(self.bounce_analysis_title, cv2.WINDOW_NORMAL)
@@ -1564,6 +1565,8 @@ class Trajectory:
         self.show_ball_direction = Direction.unknown.name  # 球當下的方向(給顯示用的)
         self.is_real_time_speed = True  # 使否即時顯示球速
         if self.is_real_time_speed:
+            self.x_ltop_pred, self.y_ltop_pred = None, None  # 桌球方框左上角
+            self.x_ltop_pred_offset, self.y_ltop_pred_offset = 0, -5  # 桌球方框左上角偏移量
             self.past_c_frame_number = 1  # 上一次取得球的frame
             self.real_time_ball_direction = Direction.unknown.name  # 球當下的方向(給realtime speed)
             self.real_time_past_ball_direction = Direction.unknown.name  # 上一次球的方向(給realtime speed)

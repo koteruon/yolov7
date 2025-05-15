@@ -141,7 +141,8 @@ class YoloV7:
             names = model.module.names if hasattr(model, "module") else model.names
             # colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
             # colors = [[239,107,39],[125,209,71],[73,188,215]]
-            colors = [[158, 66, 3], [221, 47, 113], [86, 104, 193]]  # 新聞記者的顏色
+            # colors = [[158, 66, 3], [221, 47, 113], [86, 104, 193]]  # 新聞記者的顏色
+            colors = [[255, 0, 0], [221, 47, 113], [86, 104, 193]]  # 新聞記者的顏色
 
             # Run inference
             if device.type != "cpu":
@@ -339,13 +340,13 @@ class YoloV7:
                                 opt.only_one_ball and most_confidence != -1 and most_confidence_ball_xyxy != None
                             ):  # Add bbox to image
                                 if opt.no_show_conf and opt.no_show_label:
-                                    label = ""
+                                    label = None
                                 elif opt.no_show_conf:
                                     label = f"{names[int(0)]}"
                                 else:
                                     label = f"{names[int(0)]} {most_confidence:.2f}"
                                 plot_one_box(
-                                    most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=1
+                                    most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=2
                                 )
 
                     # Print time (inference + NMS)

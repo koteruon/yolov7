@@ -151,7 +151,8 @@ class YoloV7:
         if opt.model_choices == "yolo":
             names = model.module.names if hasattr(model, "module") else model.names
             # colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
-            colors = [[158, 66, 3], [221, 47, 113], [86, 104, 193]]  # 新聞記者的顏色
+            # colors = [[158, 66, 3], [221, 47, 113], [86, 104, 193]]  # 新聞記者的顏色
+            colors = [[255, 0, 0], [221, 47, 113], [86, 104, 193]]  # 新聞記者的顏色
 
         # Run inference
         if opt.model_choices == "yolo":
@@ -315,15 +316,15 @@ class YoloV7:
                                 if opt.save_conf
                                 else (int(0), *most_confidence_ball_xywh)
                             )  # label format
-                            label = f"{names[int(0)]} {most_confidence:.2f}"
+                            # label = f"{names[int(0)]} {most_confidence:.2f}"
+                            label = None
                             plot_one_box(
-                                most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=1
+                                most_confidence_ball_xyxy, im0, label=label, color=colors[int(0)], line_thickness=2
                             )
 
                         # 取得球的位置
-                        if most_confidence_balls:
-                            if trajectory:
-                                trajectory.Read_Yolo_Label_One_Frame(balls=most_confidence_balls)
+                        if trajectory:
+                            trajectory.Read_Yolo_Label_One_Frame(balls=most_confidence_balls)
 
                 elif opt.model_choices == "tracknet" or opt.model_choices == "tracknet_pytorch":
                     x_c_pred, y_c_pred = self.TrackNet_Predict_Ball_Center(ratio, pred)
