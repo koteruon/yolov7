@@ -1465,7 +1465,7 @@ class Trajectory:
         self.WIDTH = 512
 
         # 影片跟目錄
-        root_path = f"./runs/detect/105_01_20250430"
+        root_path = f"./runs/detect/105_01_20250515"
         video_fullname = "105_01.mp4"
         self.video_name = os.path.splitext(video_fullname)[0]
         self.video_suffix = os.path.splitext(video_fullname)[1]
