@@ -803,10 +803,13 @@ class Trajectory:
                     if index in frame_buffers:
                         image_CVs = frame_buffers[index]
                         image_CVs_size = len(image_CVs)
+                        real_time_ball_direction = direction_buffers[index]
                         if save_queue_minimum_frame_size < image_CVs_size:
                             # 另存成影片
                             height, width, _ = image_CVs[0].shape
-                            video_path = os.path.join(root_path, f"{index:03d}_{image_CVs_size}.mp4")
+                            video_path = os.path.join(
+                                root_path, f"{index:06d}_{image_CVs_size}_{real_time_ball_direction}.mp4"
+                            )
                             out = cv2.VideoWriter(
                                 video_path,
                                 cv2.VideoWriter_fourcc(*"mp4v"),
@@ -872,7 +875,7 @@ class Trajectory:
                         left_slow_motion_frames = [img for _, imgs in left_slow_motion_buffers for img in imgs]
                         if left_slow_motion_frames:
                             height, width, _ = left_slow_motion_frames[0].shape
-                            video_path = os.path.join(root_path, f"left_slow_motion.mp4")
+                            video_path = os.path.join(root_path, f"slow_motion_left.mp4")
                             out = cv2.VideoWriter(
                                 video_path,
                                 cv2.VideoWriter_fourcc(*"mp4v"),
@@ -886,7 +889,7 @@ class Trajectory:
                         right_slow_motion_frames = [img for _, imgs in right_slow_motion_buffers for img in imgs]
                         if right_slow_motion_frames:
                             height, width, _ = right_slow_motion_frames[0].shape
-                            video_path = os.path.join(root_path, f"right_slow_motion.mp4")
+                            video_path = os.path.join(root_path, f"slow_motion_right.mp4")
                             out = cv2.VideoWriter(
                                 video_path,
                                 cv2.VideoWriter_fourcc(*"mp4v"),
@@ -1318,62 +1321,62 @@ class Trajectory:
         #     )
 
         # # 標示出球速
-        if self.MAX_velo > 113:
-            cv2.putText(
-                image_CV,
-                "          " + "Loss",
-                (10, 40),
-                cv2.FONT_HERSHEY_TRIPLEX,
-                1,
-                (0, 255, 255),
-                1,
-                cv2.LINE_AA,
-            )
-        elif self.show_ball_direction != Direction.unknown.name:
-            cv2.putText(
-                image_CV,
-                "          " + str(self.shotspeed),
-                (10, 40),
-                cv2.FONT_HERSHEY_TRIPLEX,
-                1,
-                (0, 255, 255),
-                1,
-                cv2.LINE_AA,
-            )
-        # 無法辨別球路方向時
-        else:
-            cv2.putText(
-                image_CV,
-                "          " + "0",
-                (10, 40),
-                cv2.FONT_HERSHEY_TRIPLEX,
-                1,
-                (0, 255, 255),
-                1,
-                cv2.LINE_AA,
-            )
+        # if self.MAX_velo > 113:
+        #     cv2.putText(
+        #         image_CV,
+        #         "          " + "Loss",
+        #         (10, 40),
+        #         cv2.FONT_HERSHEY_TRIPLEX,
+        #         1,
+        #         (0, 255, 255),
+        #         1,
+        #         cv2.LINE_AA,
+        #     )
+        # elif self.show_ball_direction != Direction.unknown.name:
+        #     cv2.putText(
+        #         image_CV,
+        #         "          " + str(self.shotspeed),
+        #         (10, 40),
+        #         cv2.FONT_HERSHEY_TRIPLEX,
+        #         1,
+        #         (0, 255, 255),
+        #         1,
+        #         cv2.LINE_AA,
+        #     )
+        # else:
+        #     # 無法辨別球路方向時
+        #     cv2.putText(
+        #         image_CV,
+        #         "          " + "0",
+        #         (10, 40),
+        #         cv2.FONT_HERSHEY_TRIPLEX,
+        #         1,
+        #         (0, 255, 255),
+        #         1,
+        #         cv2.LINE_AA,
+        #     )
 
         # # 其他左上角的文字
-        cv2.putText(
-            image_CV,
-            "Speed:",
-            (10, 40),
-            cv2.FONT_HERSHEY_TRIPLEX,
-            1,
-            (0, 255, 255),
-            1,
-            cv2.LINE_AA,
-        )
-        cv2.putText(
-            image_CV,
-            "(m/s)",
-            (260, 40),
-            cv2.FONT_HERSHEY_TRIPLEX,
-            1,
-            (0, 255, 255),
-            1,
-            cv2.LINE_AA,
-        )
+        # cv2.putText(
+        #     image_CV,
+        #     "Speed:",
+        #     (10, 40),
+        #     cv2.FONT_HERSHEY_TRIPLEX,
+        #     1,
+        #     (0, 255, 255),
+        #     1,
+        #     cv2.LINE_AA,
+        # )
+        # cv2.putText(
+        #     image_CV,
+        #     "(m/s)",
+        #     (260, 40),
+        #     cv2.FONT_HERSHEY_TRIPLEX,
+        #     1,
+        #     (0, 255, 255),
+        #     1,
+        #     cv2.LINE_AA,
+        # )
 
         # cv2.putText(
         #     image_CV,
