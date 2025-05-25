@@ -980,10 +980,20 @@ class Trajectory:
         self.ball_direction, self.real_time_ball_direction = Direction.unknown.name, Direction.unknown.name
         if len(x_tmp) >= 3:
             # 檢查是否嚴格遞增或嚴格遞減,(軌跡方向是否相同) x_tmp是左邊新右邊舊，所以要相反
-            if self.is_first_ball:
-                self.ball_direction = self.Monotonic(x_tmp[:4][::-1], strictly=False, half=False)
-            else:
-                self.ball_direction = self.Monotonic(x_tmp[:8][::-1], strictly=False, half=False)
+            # if self.is_first_ball:
+            self.ball_direction = self.Monotonic(
+                x_tmp[:4][::-1],
+                strictly=False,
+                half=False,
+                return_unknown=False,
+            )
+            # else:
+            #     self.ball_direction = self.Monotonic(
+            #         x_tmp[:8][::-1],
+            #         strictly=False,
+            #         half=False,
+            #         return_unknown=False,
+            #     )
             self.show_ball_direction = self.Monotonic(x_tmp[:2][::-1], strictly=False, half=False)
             if self.is_real_time_speed:
                 self.real_time_ball_direction = self.Monotonic(
@@ -1417,12 +1427,17 @@ class Trajectory:
         set_radio = 584 / 325
         cv2.resize(img_opt_bounce_location, (int(set_height), int(set_height * set_radio)))
         img_opt_bounce_location_height, img_opt_bounce_location_width, _ = img_opt_bounce_location.shape
+        # image_CV[
+        #     image_CV_height - img_opt_bounce_location_height : image_CV_height,
+        #     image_CV_width
+        #     - bounce_analyze_img_width
+        #     - img_opt_bounce_location_width : image_CV_width
+        #     - bounce_analyze_img_width,
+        #     :,
+        # ] = img_opt_bounce_location
         image_CV[
-            image_CV_height - img_opt_bounce_location_height : image_CV_height,
-            image_CV_width
-            - bounce_analyze_img_width
-            - img_opt_bounce_location_width : image_CV_width
-            - bounce_analyze_img_width,
+            image_CV_height - bounce_analyze_img_height : image_CV_height,
+            image_CV_width - bounce_analyze_img_width : image_CV_width,
             :,
         ] = img_opt_bounce_location
 
@@ -1551,7 +1566,7 @@ class Trajectory:
             if self.is_show_bounce_analysis:
                 self.bounce_analysis_title = "Bounce Analysis"
                 cv2.namedWindow(self.bounce_analysis_title, cv2.WINDOW_NORMAL)
-            self.is_show_bounce_location = False
+            self.is_show_bounce_location = True
             if self.is_show_bounce_location:
                 self.bounce_location_title = "Bounce Location"
                 cv2.namedWindow(self.bounce_location_title, cv2.WINDOW_NORMAL)
