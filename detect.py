@@ -6,6 +6,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pandas as pd
 import torch
 import torch.backends.cudnn as cudnn
 from matplotlib.path import Path as matplotlib_path
@@ -65,7 +66,7 @@ class YoloV7:
         no_count_point = np.float32([upper_left, lower_left, lower_right, upper_right])
         self.polygon_path = matplotlib_path(no_count_point)
 
-    def detect(self, save_ori_img=False, only_ball=False, mark_no_count=False):
+    def detect(self, save_ori_img=False, only_ball=False, mark_no_count=False, save_csv=False):
         source, weights, view_img, save_txt, imgsz, trace = (
             opt.source,
             opt.weights,
@@ -150,10 +151,14 @@ class YoloV7:
             old_img_w = old_img_h = imgsz
             old_img_b = 1
 
+            if save_csv:
+                ball_center_csv_list = []
+
             t0 = time.time()
             for path, img, im0s, vid_cap in dataset:
+                frame_width, frame_height = im0s.shape[1], im0s.shape[0]
                 if not self.has_mark_no_count_points and mark_no_count:
-                    self.Mark_No_Count_Point(im0s, im0s.shape[1], im0s.shape[0])
+                    self.Mark_No_Count_Point(im0s, frame_width, frame_height)
                     self.has_mark_no_count_points = True
 
                 img = torch.from_numpy(img).to(device)
@@ -201,12 +206,14 @@ class YoloV7:
                     save_path = str(save_dir / p.name)  # img.jpg
                     if camera:
                         im0_origin = im0.copy()
-                        clip_path = str(save_dir / "clips" / "test" / p.stem / f"{frame}") + ".jpg"  # 0.jpg
+                        img_path = str(Path("clips") / "test" / p.stem / f"{frame}") + ".jpg"
+                        clip_path = str(save_dir / img_path)
                         keyframe_path = str(save_dir / "keyframes" / "test" / p.stem / f"{frame}") + ".jpg"  # 0.jpg
                     # Save original image
                     if save_ori_img:
                         im0_origin = im0.copy()
-                        clip_path = str(save_dir / "clips" / "test" / p.stem / f"{p.stem}_{frame}") + ".jpg"  # 0.jpg
+                        img_path = str(Path("clips") / "test" / p.stem / f"{p.stem}_{frame}") + ".jpg"
+                        clip_path = str(save_dir / img_path)
                         os.makedirs(os.path.dirname(clip_path), exist_ok=True)
                         cv2.imwrite(clip_path, im0_origin)
 
@@ -335,6 +342,11 @@ class YoloV7:
                                 with open(txt_path + ".txt", "a") as f:
                                     f.write(("%g " * len(line)).rstrip() % line + "\n")
 
+                                if save_csv:
+                                    pixel_x = int(xywh[0] * frame_width)
+                                    pixel_y = int(xywh[1] * frame_height)
+                                    ball_center_csv_list.append([frame, pixel_x, pixel_y, img_path])
+
                             # 指畫出信心最高的那一顆球
                             if (
                                 opt.only_one_ball and most_confidence != -1 and most_confidence_ball_xyxy != None
@@ -387,6 +399,13 @@ class YoloV7:
                 )
                 # print(f"Results saved to {save_dir}{s}")
 
+            if save_csv:
+                df = pd.DataFrame(
+                    ball_center_csv_list, columns=["frame", "ball_center_x", "ball_center_y", "image_path"]
+                )
+                csv_path = str(save_dir / "ball_center.csv")
+                df.to_csv(csv_path, index=False)
+
             print(f"Done. ({time.time() - t0:.3f}s)")
 
 
@@ -429,6 +448,7 @@ if __name__ == "__main__":
     parser.add_argument("--step", type=int, default=1, help="step number")
     parser.add_argument("--no-show-conf", action="store_true", help="no show conf")
     parser.add_argument("--no-show-label", action="store_true", help="no show conf")
+    parser.add_argument("--save-csv", action="store_true", help="save csv")
     opt = parser.parse_args()
     print(opt)
     # check_requirements(exclude=('pycocotools', 'thop'))
@@ -437,7 +457,17 @@ if __name__ == "__main__":
         yoloV7 = YoloV7()
         if opt.update:  # update all models (to fix SourceChangeWarning)
             for opt.weights in ["yolov7.pt"]:
-                yoloV7.detect(save_ori_img=opt.save_ori_img, only_ball=opt.onlyball, mark_no_count=opt.mark_no_count)
+                yoloV7.detect(
+                    save_ori_img=opt.save_ori_img,
+                    only_ball=opt.onlyball,
+                    mark_no_count=opt.mark_no_count,
+                    save_csv=opt.save_csv,
+                )
                 strip_optimizer(opt.weights)
         else:
-            yoloV7.detect(save_ori_img=opt.save_ori_img, only_ball=opt.onlyball, mark_no_count=opt.mark_no_count)
+            yoloV7.detect(
+                save_ori_img=opt.save_ori_img,
+                only_ball=opt.onlyball,
+                mark_no_count=opt.mark_no_count,
+                save_csv=opt.save_csv,
+            )
